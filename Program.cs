@@ -1,7 +1,12 @@
+// App entry point
+using Serilog;
+
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Serilog
+builder.Host.UseSerilog((context, services, configuration) => { configuration.WriteTo.Console(); });
+
 // Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -21,8 +26,9 @@ var summaries = new[]
 	"Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
 };
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 {
+	logger.LogInformation("GET /weatherforecast called at {Time}", DateTime.UtcNow);
 	var forecast = Enumerable.Range(1, 5).Select(index =>
 		new WeatherForecast
 		(
@@ -31,12 +37,26 @@ app.MapGet("/weatherforecast", () =>
 			summaries[Random.Shared.Next(summaries.Length)]
 		))
 		.ToArray();
+	logger.LogInformation("Returning {Count} forecast items", forecast.Length);
 	return forecast;
 })
 .WithName("GetWeatherForecast")
 .WithOpenApi();
 
-app.Run();
+try
+{
+	Log.Information("Starting up...");
+	app.Run();
+}
+catch (Exception ex)
+{
+	Log.Fatal(ex, "Host terminated unexpectedly");
+}
+finally
+{
+	Log.Debug("Shutting down...");
+	Log.CloseAndFlush();
+}
 
 internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
