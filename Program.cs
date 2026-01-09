@@ -1,5 +1,6 @@
 // App entry point
 using Serilog;
+using SerilogDemo;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +13,6 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
 	app.UseSwagger();
@@ -21,28 +21,19 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-	"Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
 app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 {
 	logger.LogInformation("GET /weatherforecast called at {Time}", DateTime.UtcNow);
-	var forecast = Enumerable.Range(1, 5).Select(index =>
-		new WeatherForecast
-		(
-			DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-			Random.Shared.Next(-20, 55),
-			summaries[Random.Shared.Next(summaries.Length)]
-		))
-		.ToArray();
+	
+	var forecast = WeatherForecastService.GetForecast();
+
 	logger.LogInformation("Returning {Count} forecast items", forecast.Length);
 	return forecast;
 })
 .WithName("GetWeatherForecast")
 .WithOpenApi();
 
+// Run the application
 try
 {
 	Log.Information("Starting up...");
@@ -56,9 +47,4 @@ finally
 {
 	Log.Debug("Shutting down...");
 	Log.CloseAndFlush();
-}
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-	public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
