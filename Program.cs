@@ -4,8 +4,11 @@ using SerilogDemo;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// appsettings.json auto reload
+builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
 // Configure Serilog
-builder.Host.UseSerilog((context, services, configuration) => { configuration.WriteTo.Console(); });
+builder.Host.UseSerilog((context, services, configuration) => configuration.ReadFrom.Configuration(context.Configuration));
 
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
@@ -24,7 +27,7 @@ app.UseHttpsRedirection();
 app.MapGet("/weatherforecast", (ILogger<Program> logger) =>
 {
 	logger.LogInformation("GET /weatherforecast called at {Time}", DateTime.UtcNow);
-	
+
 	var forecast = WeatherForecastService.GetForecast();
 
 	logger.LogInformation("Returning {Count} forecast items", forecast.Length);
