@@ -1,30 +1,61 @@
-# See https://aka.ms/customizecontainer to learn how to customize your debug container and how Visual Studio uses this Dockerfile to build your images for faster debugging.
+# Multi-stage Dockerfile for SerilogDemo API
+# Optimized for multi-instance deployment behind load balancer
 
-# This stage is used when running from VS in fast mode (Default for Debug configuration)
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
-USER app
-WORKDIR /app
-EXPOSE 8080
-EXPOSE 8081
-
-
-# This stage is used to build the service project
+#------------------------------------------------------------------------------
+# Stage 1: Build
+#------------------------------------------------------------------------------
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
+
+# Copy csproj and restore dependencies (cached layer)
 COPY ["SerilogDemo.csproj", "."]
-RUN dotnet restore "./SerilogDemo.csproj"
+RUN dotnet restore "SerilogDemo.csproj"
+
+# Copy source and build
 COPY . .
-WORKDIR "/src/."
-RUN dotnet build "./SerilogDemo.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet build "SerilogDemo.csproj" -c Release -o /app/build
 
-# This stage is used to publish the service project to be copied to the final stage
+#------------------------------------------------------------------------------
+# Stage 2: Publish
+#------------------------------------------------------------------------------
 FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./SerilogDemo.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "SerilogDemo.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-# This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
-FROM base AS final
+#------------------------------------------------------------------------------
+# Stage 3: Runtime
+#------------------------------------------------------------------------------
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r appgroup && useradd -r -g appgroup appuser
+
 WORKDIR /app
+
+# Copy published app
 COPY --from=publish /app/publish .
+
+# Create Logs directory for Serilog file sink
+RUN mkdir -p /app/Logs
+
+# Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose port (Kestrel default)
+EXPOSE 8080
+
+# Environment variables for containerized deployment
+ENV ASPNETCORE_URLS=http://+:8080
+ENV ASPNETCORE_ENVIRONMENT=Production
+ENV Logging__Console__FormatterName=Json
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
 ENTRYPOINT ["dotnet", "SerilogDemo.dll"]
