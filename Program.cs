@@ -1,27 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Serilog;
-using Serilog.Formatting.Json;
 using SerilogDemo.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Get instance ID early for use in file paths
-var instanceId = Environment.GetEnvironmentVariable("INSTANCE_ID") ?? Environment.MachineName;
-
 // Configure Serilog
-builder.Host.UseSerilog((context, services, configuration) => configuration
-    .ReadFrom.Configuration(context.Configuration)
-    // Override file sinks with instance-specific paths to avoid cross-container write conflicts
-    .WriteTo.File(
-        path: $"Logs/{instanceId}/log-.log",
-        rollingInterval: RollingInterval.Day,
-        outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{Level:u3}|InstanceId: {InstanceId}] {Message:lj}{NewLine}{Exception}")
-    .WriteTo.File(
-        formatter: new JsonFormatter(),
-        path: $"Logs/{instanceId}/structured-.json",
-        rollingInterval: RollingInterval.Day)
-    .Enrich.WithProperty("InstanceId", instanceId)
-    .Enrich.FromLogContext());
+builder.Host.UseSerilog((context, services, configuration) => 
+    configuration.ReadFrom.Configuration(context.Configuration));
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -36,16 +21,14 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres") 
+    ?? throw new InvalidOperationException("PostgreSQL connection string is not configured.");
+
 // Add health checks
-builder.Services.AddHealthChecks()
-    .AddNpgSql(builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? "Host=localhost;Database=ecommerce;Username=serilog;Password=serilog123");
+builder.Services.AddHealthChecks().AddNpgSql(postgresConnectionString);
 
 // Configure PostgreSQL
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Host=localhost;Database=ecommerce;Username=serilog;Password=serilog123";
-builder.Services.AddDbContext<EcommerceDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<EcommerceDbContext>(options => options.UseNpgsql(postgresConnectionString));
 
 var app = builder.Build();
 
@@ -70,42 +53,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-// Serilog request logging with enrichment (skip health checks to reduce noise)
-app.UseSerilogRequestLogging(options =>
-{
-    options.GetLevel = (httpContext, elapsed, ex) =>
-    {
-        // Reduce health check logs to debug level
-        if (httpContext.Request.Path.StartsWithSegments("/health"))
-            return Serilog.Events.LogEventLevel.Debug;
-
-        // Error level for exceptions
-        if (ex != null)
-            return Serilog.Events.LogEventLevel.Error;
-
-        // Warning level for client/server errors
-        if (httpContext.Response.StatusCode >= 500)
-            return Serilog.Events.LogEventLevel.Error;
-        if (httpContext.Response.StatusCode >= 400)
-            return Serilog.Events.LogEventLevel.Warning;
-
-        return Serilog.Events.LogEventLevel.Information;
-    };
-
-    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
-    {
-        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
-        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
-        diagnosticContext.Set("RemoteIP", httpContext.Connection.RemoteIpAddress?.ToString());
-        diagnosticContext.Set("UserAgent", httpContext.Request.Headers["User-Agent"].ToString());
-        diagnosticContext.Set("CorrelationId", httpContext.TraceIdentifier);
-
-        // Add query string if present
-        if (httpContext.Request.QueryString.HasValue)
-            diagnosticContext.Set("QueryString", httpContext.Request.QueryString.Value);
-    };
-});
 
 // Health check endpoint for load balancer and container orchestration
 app.MapHealthChecks("/health");

@@ -78,9 +78,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
-      # Override Loki URI for container networking (index 1 = GrafanaLoki sink after Console)
-      - Serilog__WriteTo__1__Args__uri=http://loki:3100
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - Serilog__WriteTo__LokiSink__Args__uri=http://loki:3100
       - INSTANCE_ID=api-simple
     volumes:
       - logs-data:/app/Logs
@@ -105,9 +104,8 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
-      # Override Loki URI for container networking (index 1 = GrafanaLoki sink after Console)
-      - Serilog__WriteTo__1__Args__uri=http://loki:3100
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - Serilog__WriteTo__LokiSink__Args__uri=http://loki:3100
       # INSTANCE_ID will fallback to hostname in Program.cs if not set
     volumes:
       - logs-data:/app/Logs
