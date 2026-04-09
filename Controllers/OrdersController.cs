@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
 using SerilogDemo.Models;
+using SerilogDemo.Telemetry;
 
 namespace SerilogDemo.Controllers;
 
@@ -214,6 +216,15 @@ public class OrdersController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        EcommerceMetrics.OrdersPlaced.Add(1, new TagList
+        {
+            { "delivery_courier", deliveryOption.CourierName }
+        });
+        EcommerceMetrics.OrderTotals.Record((double)order.TotalPrice, new TagList
+        {
+            { "delivery_courier", deliveryOption.CourierName }
+        });
+
         // Log order details for demo purposes
         _logger.LogInformation(
             "Order placed successfully. OrderId: {OrderId}, OrderNumber: {OrderNumber}, UserId: {UserId}, " +
@@ -253,9 +264,9 @@ public class OrdersController : ControllerBase
 
     private static string GenerateOrderNumber()
     {
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
-        var random = Random.Shared.Next(1000, 9999);
-        return $"ORD-{timestamp}-{random}";
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
+        var uniqueSuffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
+        return $"ORD-{timestamp}-{uniqueSuffix}";
     }
 
     private static OrderDto MapToDto(Order order)

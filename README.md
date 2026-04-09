@@ -1,6 +1,6 @@
-# Serilog E-Commerce Demo
+# OpenTelemetry E-Commerce Demo
 
-This project demonstrates how Serilog can be utilized in a C# project with a simple e-commerce API, Grafana Loki integration, and PostgreSQL persistence.
+This project demonstrates OpenTelemetry observability in a C# e-commerce API with Grafana visualization, Loki logs, Tempo traces, Prometheus metrics, and PostgreSQL persistence.
 
 Main branch is starting point. Each post of Serilog series posted on mateusz-dev.pl/blog has separate branch. This approach allows you to quickly fetch desired code and start building your own solution :)
 
@@ -10,21 +10,24 @@ Whole repo/code is open-source. Feel free to copy-paste and modify code to your 
 
 ```mermaid
 flowchart TB
-    subgraph Simple["Simple Mode (default)"]
-        Client1[Client] --> API1[SerilogDemo API<br/>:5299]
+    Client[Client] --> LB[Nginx Load Balancer<br/>:8080]
+
+    subgraph ApiLayer["API Layer"]
+        LB --> API1[API Instance 1]
+        LB --> API2[API Instance 2]
+        LB --> API3[API Instance N...]
     end
     
-    subgraph Scaled["Scaled Mode (--profile scaled)"]
-        Client2[Client] --> LB[Nginx Load Balancer<br/>:8080]
-        LB --> API2[API Instance 1]
-        LB --> API3[API Instance 2]
-        LB --> API4[API Instance N...]
+    subgraph Telemetry
+      API1 & API2 & API3 --> OTel[OpenTelemetry Collector<br/>:4317]
+      OTel --> Loki[Loki<br/>:3100]
+      OTel --> Tempo[Tempo<br/>:3200]
+      OTel --> Prom[Prometheus<br/>:9090]
     end
-    
+
     subgraph Infrastructure
-        API1 & API2 & API3 & API4 --> PG[(PostgreSQL<br/>:5432)]
-        API1 & API2 & API3 & API4 --> Loki[Loki<br/>:3100]
-        Loki --> Grafana[Grafana<br/>:3000]
+        API1 & API2 & API3 --> PG[(PostgreSQL<br/>:5432)]
+      Loki & Tempo & Prom --> Grafana[Grafana<br/>:3000]
     end
     
     subgraph LoadTest["Load Testing (--profile loadtest)"]
@@ -114,10 +117,11 @@ erDiagram
 ## Features
 
 - **E-Commerce API** - Items catalog, shopping basket, delivery/payment options, order placement
+- **OpenTelemetry Signals** - Traces, metrics, and logs exported via OTLP
+- **Grafana Stack** - Loki logs, Tempo traces, Prometheus metrics in one UI
 - **Structured Logging** - All API operations log structured data with properties like UserId, OrderId, ItemId
-- **Grafana Loki** - Centralized log aggregation and querying
 - **PostgreSQL** - Persistent data storage with Entity Framework Core
-- **Scalable Deployment** - Multi-instance deployment with Nginx load balancer
+- **Single Docker Entry Point** - Nginx fronts the API in both default and scaled runs
 - **Load Testing** - k6-based load testing for benchmarking
 
 ## Prerequisites
@@ -127,50 +131,42 @@ erDiagram
 
 ## Quick Start
 
-### Simple Mode (Single API Instance)
-
 ```bash
-# Start infrastructure + API
-docker compose --profile simple up -d
-
-# Access points:
-# - API: http://localhost:5299
-# - Swagger: http://localhost:5299/swagger
-# - Grafana: http://localhost:3000 (admin/admin)
-```
-
-### Scaled Mode (Multiple API Instances)
-
-```bash
-# Start with 3 API instances behind Nginx load balancer
-docker compose --profile scaled up -d --scale api-scaled=3
-
-# Access points:
-# - API (via LB): http://localhost:8080
-# - Grafana: http://localhost:3000 (admin/admin)
-```
-
-### With Load Testing
-
-```bash
-# Start scaled deployment with k6 load tester
-docker compose --profile scaled --profile loadtest up -d --scale api-scaled=5
-
-# k6 will automatically start generating traffic
-# Monitor logs in Grafana
-```
-
-### Local Development
-
-```bash
-# Start only infrastructure
+# Start infrastructure + one API instance behind Nginx
 docker compose up -d
 
-# Run API locally
-dotnet run
+# Scale the API behind the same Nginx entry point
+docker compose up -d --scale api=3
 
-# API: http://localhost:5299
+# Add the load test profile
+docker compose --profile loadtest up -d --scale api=5
+
+# Access points:
+# - API: http://localhost:8080
+# - Swagger: http://localhost:8080/swagger
+# - Grafana: http://localhost:3000 (admin/admin)
 ```
+
+## Stopping Services
+
+```bash
+# Stop the default stack
+docker compose down
+
+# If the load test profile is running, stop that profile too
+docker compose --profile loadtest down
+
+# Also remove volumes
+docker compose --profile loadtest down -v
+```
+
+## API Requests
+
+All API requests are documented in the [SerilogDemo.http](SerilogDemo.http) file. 
+
+Open this file in VS Code with the [REST Client extension](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) or in JetBrains IDEs to execute requests directly from the editor.
+
+The file covers the main demo flow: browse items, manage a basket, choose delivery and payment options, place an order, and inspect logs.
 
 ## API Endpoints
 
@@ -222,56 +218,9 @@ All order endpoints require `X-User-Id` header.
 
 ### Health Check
 
-| Method | Endpoint  | Description                           |
-| ------ | --------- | ------------------------------------- |
-| GET    | `/health` | Health check (used by load balancer)  |
-
-## Usage Examples
-
-All API requests are documented in the [SerilogDemo.http](SerilogDemo.http) file. 
-
-Open this file in VS Code with the [REST Client extension](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) or in JetBrains IDEs to execute requests directly from the editor.
-
-The file includes:
-- Complete shopping flow (browse → add to basket → checkout)
-- All CRUD operations for basket management
-- Delivery and payment option queries
-- Order placement and history
-
-## Querying Logs in Loki
-
-### Via Grafana UI
-
-1. Open `http://localhost:3000`
-2. Go to **Explore** → Select **Loki** data source
-3. Use LogQL queries:
-
-```logql
-# All logs from the application
-{app="SerilogDemo"}
-
-# Filter by log level
-{app="SerilogDemo"} | json | Level="Error"
-
-# Filter by UserId
-{app="SerilogDemo"} |= "user-123"
-
-# Filter by OrderId (structured)
-{app="SerilogDemo"} | json | Properties_OrderId != ""
-
-# Search for specific operations
-{app="SerilogDemo"} |= "Order placed"
-```
-
-### Via HTTP API
-
-```bash
-# Query logs containing "Order placed"
-curl -G "http://localhost:3100/loki/api/v1/query_range" \
-  --data-urlencode 'query={app="SerilogDemo"} |= "Order placed"' \
-  --data-urlencode "start=$(date -d '1 hour ago' +%s)000000000" \
-  --data-urlencode "end=$(date +%s)000000000"
-```
+| Method | Endpoint  | Description                          |
+| ------ | --------- | ------------------------------------ |
+| GET    | `/health` | Health check (used by load balancer) |
 
 ## Structured Logging Properties
 
@@ -282,85 +231,25 @@ The application logs structured data with the following key properties:
 | `UserId`      | User identifier from X-User-Id header | `user-123`          |
 | `ItemId`      | Product item identifier               | `cc51f197-...`      |
 | `OrderId`     | Order identifier                      | `fe6a2dd1-...`      |
-| `OrderNumber` | Human-readable order number           | `ORD-20260123-1234` |
+| `OrderNumber` | Human-readable order number           | `ORD-20260409123045123-1A2B3C4D` |
 | `BasketId`    | Shopping basket identifier            | `58e2d1d1-...`      |
 | `TotalPrice`  | Order/basket total                    | `739.94`            |
 | `Quantity`    | Item quantity                         | `2`                 |
 
-## Load Testing & Benchmarking
+## Load Testing
 
-The project includes k6-based load testing for comparing structured logs (Loki) vs plain text (file) search performance.
-
-### Running Load Tests
-
-```bash
-# Start scaled deployment
-docker compose --profile scaled up -d --scale api-scaled=5
-
-# Run k6 manually with custom parameters
-docker run --rm -i --network serilogdemo_serilog-network \
-  -v $(pwd)/k6:/scripts \
-  grafana/k6 run /scripts/load-test.js \
-  --vus 200 --duration 30m
-```
-
-### Test Scenarios
-
-The load test simulates realistic e-commerce traffic:
-- **40%** - Browse items only
-- **25%** - Browse and add to basket
-- **15%** - View basket contents
-- **15%** - Complete checkout flow
-- **5%** - Returning customer viewing orders
-
-### Benchmarking Log Queries
-
-After generating substantial logs (~1GB), compare query performance:
-
-**Loki (structured):**
-```bash
-time curl -s "http://localhost:3100/loki/api/v1/query_range" \
-  --data-urlencode 'query={app="SerilogDemo"} | json | Properties_OrderId="<order-id>"'
-```
-
-**File (grep):**
-```bash
-time grep "<order-id>" Logs/*.log
-```
+The project includes a k6 scenario that generates realistic e-commerce traffic against the Nginx entry point. See [k6](k6/load-test.js) configuration for more details.
 
 ## Configuration
 
-### Serilog (appsettings.json)
+### OpenTelemetry (appsettings.json)
 
 ```json
 {
-  "Serilog": {
-    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File", "Serilog.Sinks.Grafana.Loki"],
-    "WriteTo": [
-      { "Name": "Console" },
-      {
-        "Name": "File",
-        "Args": { "path": "Logs/log-.log", "rollingInterval": "Day" }
-      },
-      {
-        "Name": "File",
-        "Args": {
-          "path": "Logs/structured-log-.json",
-          "formatter": "Serilog.Formatting.Json.JsonFormatter, Serilog",
-          "rollingInterval": "Day"
-        }
-      },
-      {
-        "Name": "GrafanaLoki",
-        "Args": {
-          "uri": "http://localhost:3100",
-          "labels": [
-            { "key": "app", "value": "SerilogDemo" },
-            { "key": "environment", "value": "Development" }
-          ]
-        }
-      }
-    ]
+  "OpenTelemetry": {
+    "ServiceName": "serilogdemo-api",
+    "Protocol": "http/protobuf",
+    "OtlpEndpoint": "http://localhost:4318"
   }
 }
 ```
@@ -370,19 +259,9 @@ time grep "<order-id>" Logs/*.log
 ```json
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123"
+    "Postgres": "Host=localhost;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123"
   }
 }
-```
-
-## Stopping Services
-
-```bash
-# Stop all services
-docker compose --profile simple --profile scaled --profile loadtest down
-
-# Also remove volumes (database data, logs)
-docker compose --profile simple --profile scaled --profile loadtest down -v
 ```
 
 ## Project Structure
@@ -398,7 +277,12 @@ SerilogDemo/
 │   └── load-test.js
 ├── nginx/                # Load balancer config
 │   └── nginx.conf
-├── Logs/                 # Local log files
+├── observability/        # OTEL/Grafana/Prometheus/Tempo/Loki configs
+│   ├── otel-collector-config.yml
+│   ├── grafana-datasources.yml
+│   ├── prometheus.yml
+│   ├── tempo.yml
+│   └── loki-config.yml
 ├── docker-compose.yml    # Container orchestration
 ├── Dockerfile            # API container image
 ├── SerilogDemo.http      # API request examples

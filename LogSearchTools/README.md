@@ -43,9 +43,11 @@ Queries Loki HTTP API with:
 - LogQL json parser for precise property matching
 - Simple string contains for faster searches
 - Configurable lookback period
+- Default OpenTelemetry service selector: `service_name="serilogdemo-api"`
 
 ## Requirements
 
 - .NET 8.0
 - Log files in `../Logs/` folder (for file search)
 - Loki running at `http://localhost:3100` (for Loki search)
+- OpenTelemetry pipeline enabled so API logs are exported to Loki

@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
+using SerilogDemo.Telemetry;
 
 namespace SerilogDemo.Controllers;
 
@@ -37,6 +39,12 @@ public class ItemsController : ControllerBase
             .Select(i => new ItemDto(i.Id, i.Name, i.Description, i.Price, i.Category, i.ImageUrl))
             .ToListAsync();
 
+        EcommerceMetrics.CatalogRequests.Add(1, new TagList
+        {
+            { "operation", "list" },
+            { "filtered", string.IsNullOrWhiteSpace(category) ? "false" : "true" }
+        });
+
         _logger.LogInformation("Returning {Count} items from catalog", items.Count);
         return Ok(items);
     }
@@ -56,6 +64,11 @@ public class ItemsController : ControllerBase
             _logger.LogWarning("Item {ItemId} not found", id);
             return NotFound(new { message = $"Item with ID {id} not found" });
         }
+
+        EcommerceMetrics.CatalogRequests.Add(1, new TagList
+        {
+            { "operation", "details" }
+        });
 
         _logger.LogInformation("Returning item {ItemId}: {ItemName}", id, item.Name);
         return Ok(new ItemDto(item.Id, item.Name, item.Description, item.Price, item.Category, item.ImageUrl));

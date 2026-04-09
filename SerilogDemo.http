@@ -7,7 +7,7 @@
 # Flow: Browse Items → Add to Basket → Select Delivery/Payment → Place Order
 ###############################################################################
 
-#@baseUrl = http://localhost:5299
+# @baseUrl = http://localhost:5299
 @baseUrl = http://localhost:8080
 @userId = demo-user-123
 
@@ -186,32 +186,32 @@ Accept: application/json
 @grafanaUrl = http://localhost:3000
 
 ### Get all logs from SerilogDemo app (last 1 hour)
-GET {{lokiUrl}}/loki/api/v1/query_range?query={app="SerilogDemo"}&start={{$timestamp -3600000}}&end={{$timestamp}}&limit=100
+GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"}&start={{$timestamp -3600000}}&end={{$timestamp}}&limit=100
 Accept: application/json
 
 ### Get logs for specific UserId
 # Replace the userId value to search for different users
-GET {{lokiUrl}}/loki/api/v1/query_range?query={app="SerilogDemo"} |= `"UserId":"demo-user-123"`&limit=50
+GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"} |= `"UserId":"demo-user-123"`&limit=50
 Accept: application/json
 
 ### Get logs for UserId using LogQL json parser (more precise)
-GET {{lokiUrl}}/loki/api/v1/query_range?query={app="SerilogDemo"} | json | UserId="demo-user-123"&limit=50
+GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"} | json | UserId="demo-user-123"&limit=50
 Accept: application/json
 
 ### Get all ERROR level logs
-GET {{lokiUrl}}/loki/api/v1/query_range?query={app="SerilogDemo"} |= `"Level":"Error"`&limit=100
+GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"} |= `"Level":"Error"`&limit=100
 Accept: application/json
 
 ### Get logs containing "order" (case insensitive)
-GET {{lokiUrl}}/loki/api/v1/query_range?query={app="SerilogDemo"} |~ `(?i)order`&limit=50
+GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"} |~ `(?i)order`&limit=50
 Accept: application/json
 
 ### Get available label names
 GET {{lokiUrl}}/loki/api/v1/labels
 Accept: application/json
 
-### Get values for 'app' label
-GET {{lokiUrl}}/loki/api/v1/label/app/values
+### Get values for 'service_name' label
+GET {{lokiUrl}}/loki/api/v1/label/service_name/values
 Accept: application/json
 
 

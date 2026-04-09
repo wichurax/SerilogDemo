@@ -37,9 +37,6 @@ WORKDIR /app
 # Copy published app
 COPY --from=publish /app/publish .
 
-# Create Logs directory for Serilog file sink
-RUN mkdir -p /app/Logs
-
 # Change ownership to non-root user
 RUN chown -R appuser:appgroup /app
 

@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Diagnostics;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
 using SerilogDemo.Models;
+using SerilogDemo.Telemetry;
 
 namespace SerilogDemo.Controllers;
 
@@ -60,7 +62,7 @@ public class BasketController : ControllerBase
         }
 
         var dto = MapToDto(basket);
-        _logger.LogInformation("Returning basket for user {UserId} with {ItemCount} items, total: {TotalPrice:C}", 
+        _logger.LogInformation("Returning basket for user {UserId} with {ItemCount} items, total: {TotalPrice:C}",
             userId, dto.TotalItems, dto.TotalPrice);
         return Ok(dto);
     }
@@ -81,7 +83,13 @@ public class BasketController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
 
-        _logger.LogInformation("Adding item {ItemId} (quantity: {Quantity}) to basket for user {UserId}", 
+        if (request.Quantity <= 0)
+        {
+            _logger.LogWarning("Rejected basket add for user {UserId}: quantity {Quantity} is invalid", userId, request.Quantity);
+            return BadRequest(new { message = "Quantity must be greater than zero" });
+        }
+
+        _logger.LogInformation("Adding item {ItemId} (quantity: {Quantity}) to basket for user {UserId}",
             request.ItemId, request.Quantity, userId);
 
         var item = await _context.Items.FindAsync(request.ItemId);
@@ -110,7 +118,7 @@ public class BasketController : ControllerBase
         if (existingItem is not null)
         {
             existingItem.Quantity += request.Quantity;
-            _logger.LogInformation("Updated quantity of item {ItemId} in basket to {Quantity}", 
+            _logger.LogInformation("Updated quantity of item {ItemId} in basket to {Quantity}",
                 request.ItemId, existingItem.Quantity);
         }
         else
@@ -138,9 +146,13 @@ public class BasketController : ControllerBase
             .FirstAsync(b => b.Id == basket.Id);
 
         var dto = MapToDto(basket);
-        _logger.LogInformation("Basket updated for user {UserId}. Total items: {TotalItems}, Total: {TotalPrice:C}", 
+        EcommerceMetrics.BasketMutations.Add(1, new TagList
+        {
+            { "operation", "add" }
+        });
+        _logger.LogInformation("Basket updated for user {UserId}. Total items: {TotalItems}, Total: {TotalPrice:C}",
             userId, dto.TotalItems, dto.TotalPrice);
-        
+
         return Ok(dto);
     }
 
@@ -160,7 +172,7 @@ public class BasketController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
 
-        _logger.LogInformation("Updating item {ItemId} quantity to {Quantity} for user {UserId}", 
+        _logger.LogInformation("Updating item {ItemId} quantity to {Quantity} for user {UserId}",
             itemId, request.Quantity, userId);
 
         var basket = await _context.Baskets
@@ -185,7 +197,7 @@ public class BasketController : ControllerBase
         {
             basket.Items.Remove(basketItem);
             _context.BasketItems.Remove(basketItem);
-            _logger.LogInformation("Removed item {ItemId} from basket (quantity was set to {Quantity})", 
+            _logger.LogInformation("Removed item {ItemId} from basket (quantity was set to {Quantity})",
                 itemId, request.Quantity);
         }
         else
@@ -196,6 +208,11 @@ public class BasketController : ControllerBase
 
         basket.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        EcommerceMetrics.BasketMutations.Add(1, new TagList
+        {
+            { "operation", request.Quantity <= 0 ? "remove" : "update" }
+        });
 
         var dto = MapToDto(basket);
         return Ok(dto);
@@ -240,11 +257,16 @@ public class BasketController : ControllerBase
         basket.Items.Remove(basketItem);
         _context.BasketItems.Remove(basketItem);
         basket.UpdatedAt = DateTime.UtcNow;
-        
+
         await _context.SaveChangesAsync();
 
+        EcommerceMetrics.BasketMutations.Add(1, new TagList
+        {
+            { "operation", "remove" }
+        });
+
         _logger.LogInformation("Removed item {ItemId} from basket for user {UserId}", itemId, userId);
-        
+
         var dto = MapToDto(basket);
         return Ok(dto);
     }
@@ -276,6 +298,10 @@ public class BasketController : ControllerBase
             _context.BasketItems.RemoveRange(basket.Items);
             _context.Baskets.Remove(basket);
             await _context.SaveChangesAsync();
+            EcommerceMetrics.BasketMutations.Add(1, new TagList
+            {
+                { "operation", "clear" }
+            });
             _logger.LogInformation("Basket cleared for user {UserId}", userId);
         }
         else

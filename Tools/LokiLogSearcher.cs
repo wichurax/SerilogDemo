@@ -12,18 +12,24 @@ public class LokiLogSearcher : IDisposable
 {
     private readonly HttpClient _httpClient;
     private readonly string _lokiBaseUrl;
-    private readonly string _appLabel;
+    private readonly string _serviceName;
+    private readonly string _serviceLabelKey;
     private readonly JsonSerializerOptions _jsonOptions;
 
     /// <summary>
     /// Creates a new LokiLogSearcher instance.
     /// </summary>
     /// <param name="lokiBaseUrl">Base URL for Loki API (default: http://localhost:3100)</param>
-    /// <param name="appLabel">The value of the 'app' label in Loki (default: "SerilogDemo API")</param>
-    public LokiLogSearcher(string lokiBaseUrl = "http://localhost:3100", string appLabel = "SerilogDemo API")
+    /// <param name="serviceName">The value of the service label in Loki (default: "serilogdemo-api")</param>
+    /// <param name="serviceLabelKey">The service label key in Loki (default: "service_name")</param>
+    public LokiLogSearcher(
+        string lokiBaseUrl = "http://localhost:3100",
+        string serviceName = "serilogdemo-api",
+        string serviceLabelKey = "service_name")
     {
         _lokiBaseUrl = lokiBaseUrl.TrimEnd('/');
-        _appLabel = appLabel;
+        _serviceName = serviceName;
+        _serviceLabelKey = serviceLabelKey;
         _httpClient = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(30)
@@ -48,7 +54,7 @@ public class LokiLogSearcher : IDisposable
     {
         // Using LogQL with json parser for precise property matching
         // This is more accurate than simple string contains
-        var query = $"{{app=\"{_appLabel}\"}} | json | UserId=\"{userId}\"";
+        var query = $"{{{_serviceLabelKey}=\"{_serviceName}\"}} | json | UserId=\"{userId}\"";
         return await ExecuteQueryAsync(query, lookbackMinutes, limit);
     }
 
@@ -61,7 +67,7 @@ public class LokiLogSearcher : IDisposable
         int limit = 1000)
     {
         // Simple line filter - faster but may have false positives
-        var query = $"{{app=\"{_appLabel}\"}} |= `\"{userId}\"`";
+        var query = $"{{{_serviceLabelKey}=\"{_serviceName}\"}} |= `\"{userId}\"`";
         return await ExecuteQueryAsync(query, lookbackMinutes, limit);
     }
 
