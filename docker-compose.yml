@@ -115,6 +115,18 @@ services:
     networks:
       - serilog-network
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - serilog-network
+
   #---------------------------------------------------------------------------
   # API Service (load-balanced by Nginx)
   #---------------------------------------------------------------------------
@@ -126,6 +138,12 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - PaymentGateway__BaseUrl=http://payment-gateway:8080
+      - RabbitMq__HostName=rabbitmq
+      - RabbitMq__Port=5672
+      - RabbitMq__UserName=guest
+      - RabbitMq__Password=guest
+      - RabbitMq__VirtualHost=/
       - OTEL_SERVICE_NAME=serilogdemo-api
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
@@ -133,6 +151,90 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      payment-gateway:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    networks:
+      - serilog-network
+    expose:
+      - "8080"
+
+  payment-gateway:
+    build:
+      context: .
+      dockerfile: PaymentGateway/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - OTEL_SERVICE_NAME=payment-gateway
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=Development,service.namespace=serilogdemo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    networks:
+      - serilog-network
+    expose:
+      - "8080"
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: NotificationService/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - RabbitMq__HostName=rabbitmq
+      - RabbitMq__Port=5672
+      - RabbitMq__UserName=guest
+      - RabbitMq__Password=guest
+      - RabbitMq__VirtualHost=/
+      - Notification__SimulationMode=${NOTIFICATION_SIMULATION_MODE:-Success}
+      - OTEL_SERVICE_NAME=notification-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=Development,service.namespace=serilogdemo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+    networks:
+      - serilog-network
+    expose:
+      - "8080"
+
+  fulfillment-service:
+    build:
+      context: .
+      dockerfile: FulfillmentService/Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123
+      - RabbitMq__HostName=rabbitmq
+      - RabbitMq__Port=5672
+      - RabbitMq__UserName=guest
+      - RabbitMq__Password=guest
+      - RabbitMq__VirtualHost=/
+      - Fulfillment__WarehouseName=${FULFILLMENT_WAREHOUSE_NAME:-demo-warehouse-01}
+      - Fulfillment__ProcessingDelayMilliseconds=${FULFILLMENT_PROCESSING_DELAY_MS:-350}
+      - OTEL_SERVICE_NAME=fulfillment-service
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=Development,service.namespace=serilogdemo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
       otel-collector:
         condition: service_started
     networks:

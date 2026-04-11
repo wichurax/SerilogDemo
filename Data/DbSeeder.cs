@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Microsoft.Extensions.Options;
 using SerilogDemo.Models;
+using SerilogDemo.Options;
 
 namespace SerilogDemo.Data;
 
@@ -284,5 +286,40 @@ public static class DbSeeder
                 }
             }
         }
+    }
+
+    public static async Task SeedAsync(EcommerceDbContext context, ILogger<EcommerceDbContext> logger, IOptions<WarehouseOptions> warehouseOptions)
+    {
+        await SeedAsync(context, logger);
+
+        if (await context.WarehouseInventories.AnyAsync())
+        {
+            return;
+        }
+
+        var warehouseName = warehouseOptions.Value.DefaultWarehouseName;
+        logger.LogInformation("Seeding warehouse inventory for warehouse {WarehouseName}...", warehouseName);
+
+        var inventories = await context.Items
+            .OrderBy(item => item.Name)
+            .Select(item => new WarehouseInventory
+            {
+                Id = Guid.NewGuid(),
+                WarehouseName = warehouseName,
+                ItemId = item.Id,
+                QuantityOnHand = item.Category == "Furniture" ? 8 : 25,
+                QuantityReserved = 0,
+                UpdatedAtUtc = DateTime.UtcNow
+            })
+            .ToListAsync();
+
+        if (inventories.Count == 0)
+        {
+            return;
+        }
+
+        await context.WarehouseInventories.AddRangeAsync(inventories);
+        await context.SaveChangesAsync();
+        logger.LogInformation("Seeded {Count} warehouse inventory records", inventories.Count);
     }
 }

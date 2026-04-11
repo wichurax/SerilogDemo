@@ -6,7 +6,10 @@ public record ItemDto(
     string Description,
     decimal Price,
     string Category,
-    string ImageUrl
+    string ImageUrl,
+    int QuantityOnHand,
+    int QuantityReserved,
+    int AvailableQuantity
 );
 
 public record BasketDto(
@@ -65,7 +68,22 @@ public record OrderDto(
     decimal ItemsTotal,
     decimal TotalPrice,
     string Status,
+    string PaymentStatus,
+    Guid? PaymentAttemptId,
+    string? PaymentProviderCode,
+    string? PaymentFailureReason,
+    OrderFulfillmentDto Fulfillment,
     DateTime CreatedAt
+);
+
+public record OrderFulfillmentDto(
+    string Status,
+    string? WarehouseName,
+    bool IsPendingDelivery,
+    string? TrackingReference,
+    string? LastMessage,
+    DateTime? DispatchedAtUtc,
+    DateTime? LastUpdatedAtUtc
 );
 
 public record OrderItemDto(
@@ -87,5 +105,45 @@ public record OrderSummary(
     string OrderNumber,
     decimal TotalPrice,
     string Status,
+    string FulfillmentStatus,
+    bool IsPendingDelivery,
     DateTime CreatedAt
+);
+
+public record WarehouseInventoryDto(
+    Guid ItemId,
+    string ItemName,
+    string Category,
+    string WarehouseName,
+    int QuantityOnHand,
+    int QuantityReserved,
+    int AvailableQuantity,
+    DateTime UpdatedAtUtc
+);
+
+public record AdjustWarehouseInventoryRequest(
+    int DeltaQuantity,
+    string? Reason
+);
+
+public record RestockInventoryRequest(
+    int Quantity,
+    string? Reason
+);
+
+public record WriteOffInventoryRequest(
+    int Quantity,
+    string? Reason
+);
+
+public record RecountInventoryRequest(
+    int QuantityOnHand,
+    string? Reason
+);
+
+public record WarehouseInventoryCommandResultDto(
+    string Message,
+    int QuantityOnHand,
+    int QuantityReserved,
+    int AvailableQuantity
 );

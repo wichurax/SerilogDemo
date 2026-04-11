@@ -12,4 +12,5 @@ public class Item
     public string Category { get; set; } = string.Empty;
     public string ImageUrl { get; set; } = string.Empty;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public List<WarehouseInventory> WarehouseInventories { get; set; } = [];
 }

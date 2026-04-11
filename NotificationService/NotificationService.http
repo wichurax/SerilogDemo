@@ -1,0 +1,6 @@
+@NotificationService_HostAddress = http://localhost:5177
+
+GET {{NotificationService_HostAddress}}/health
+Accept: application/json
+
+###

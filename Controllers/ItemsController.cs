@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Diagnostics;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
+using SerilogDemo.Models;
+using SerilogDemo.Services.Inventory;
 using SerilogDemo.Telemetry;
 
 namespace SerilogDemo.Controllers;
@@ -12,11 +14,13 @@ namespace SerilogDemo.Controllers;
 public class ItemsController : ControllerBase
 {
     private readonly EcommerceDbContext _context;
+    private readonly IInventoryService _inventoryService;
     private readonly ILogger<ItemsController> _logger;
 
-    public ItemsController(EcommerceDbContext context, ILogger<ItemsController> logger)
+    public ItemsController(EcommerceDbContext context, IInventoryService inventoryService, ILogger<ItemsController> logger)
     {
         _context = context;
+        _inventoryService = inventoryService;
         _logger = logger;
     }
 
@@ -24,20 +28,24 @@ public class ItemsController : ControllerBase
     /// Get all items in the catalog.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItems([FromQuery] string? category = null)
+    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItems([FromQuery] string? category = null, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Fetching items from catalog. Category filter: {Category}", category ?? "none");
 
-        var query = _context.Items.AsQueryable();
+        var query = _context.Items.AsNoTracking().AsQueryable();
+        var warehouseName = _inventoryService.WarehouseName;
+        var normalizedCategory = category?.Trim();
 
-        if (!string.IsNullOrWhiteSpace(category))
+        if (!string.IsNullOrWhiteSpace(normalizedCategory))
         {
-            query = query.Where(i => i.Category.ToLower() == category.ToLower());
+            query = query.Where(i => EF.Functions.ILike(i.Category, normalizedCategory));
         }
 
         var items = await query
-            .Select(i => new ItemDto(i.Id, i.Name, i.Description, i.Price, i.Category, i.ImageUrl))
-            .ToListAsync();
+            .OrderBy(i => i.Category)
+            .ThenBy(i => i.Name)
+            .ProjectCatalogItems(_context.WarehouseInventories.AsNoTracking(), warehouseName)
+            .ToListAsync(cancellationToken);
 
         EcommerceMetrics.CatalogRequests.Add(1, new TagList
         {
@@ -53,11 +61,16 @@ public class ItemsController : ControllerBase
     /// Get a specific item by ID.
     /// </summary>
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ItemDto>> GetItem(Guid id)
+    public async Task<ActionResult<ItemDto>> GetItem(Guid id, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching item {ItemId}", id);
+        var warehouseName = _inventoryService.WarehouseName;
 
-        var item = await _context.Items.FindAsync(id);
+        var item = await _context.Items
+            .AsNoTracking()
+            .Where(i => i.Id == id)
+            .ProjectCatalogItems(_context.WarehouseInventories.AsNoTracking(), warehouseName)
+            .SingleOrDefaultAsync(cancellationToken);
 
         if (item is null)
         {
@@ -71,7 +84,7 @@ public class ItemsController : ControllerBase
         });
 
         _logger.LogInformation("Returning item {ItemId}: {ItemName}", id, item.Name);
-        return Ok(new ItemDto(item.Id, item.Name, item.Description, item.Price, item.Category, item.ImageUrl));
+        return Ok(item);
     }
 
     /// <summary>
@@ -96,14 +109,19 @@ public class ItemsController : ControllerBase
     /// Get items by category.
     /// </summary>
     [HttpGet("categories/{category}")]
-    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItemsByCategory(string category)
+    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItemsByCategory(string category, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Fetching items for category: {Category}", category);
+        var warehouseName = _inventoryService.WarehouseName;
+        var normalizedCategory = category.Trim();
 
-        var items = await _context.Items
-            .Where(i => i.Category.ToLower() == category.ToLower())
-            .Select(i => new ItemDto(i.Id, i.Name, i.Description, i.Price, i.Category, i.ImageUrl))
-            .ToListAsync();
+        var items = await ProjectItems(
+                _context.Items
+                    .AsNoTracking()
+                    .Where(i => EF.Functions.ILike(i.Category, normalizedCategory))
+                    .OrderBy(i => i.Name),
+                warehouseName)
+            .ToListAsync(cancellationToken);
 
         if (items.Count == 0)
         {
@@ -114,4 +132,7 @@ public class ItemsController : ControllerBase
         _logger.LogInformation("Returning {Count} items for category: {Category}", items.Count, category);
         return Ok(items);
     }
+
+    private IQueryable<ItemDto> ProjectItems(IQueryable<Item> itemsQuery, string warehouseName) =>
+        itemsQuery.ProjectCatalogItems(_context.WarehouseInventories.AsNoTracking(), warehouseName);
 }

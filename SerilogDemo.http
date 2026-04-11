@@ -281,3 +281,67 @@ X-User-Id: {{userId}}
 GET {{baseUrl}}/api/basket
 Accept: application/json
 X-User-Id: {{userId}}
+
+
+###############################################################################
+# ASYNC ORDER-PAID DEMOS
+###############################################################################
+
+@asyncDemoUserId = workshop-user-001
+
+### Async Fan-Out Happy Path - add item to basket
+POST {{baseUrl}}/api/basket/items
+Content-Type: application/json
+X-User-Id: {{asyncDemoUserId}}
+
+{
+    "itemId": "00000000-0000-0000-0000-000000000001",
+    "quantity": 1
+}
+
+### Async Fan-Out Happy Path - place order
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+X-User-Id: {{asyncDemoUserId}}
+X-Payment-Scenario: Success
+
+{
+    "deliveryOptionId": "00000000-0000-0000-0001-000000000001",
+    "paymentOptionId": "00000000-0000-0000-0002-000000000001",
+    "shippingAddress": {
+        "street": "100 Trace Avenue",
+        "city": "Seattle",
+        "postalCode": "98101",
+        "country": "USA"
+    }
+}
+
+@retryDemoUserId = workshop-user-002
+
+### Async Fan-Out Retry Demo - add item to basket
+POST {{baseUrl}}/api/basket/items
+Content-Type: application/json
+X-User-Id: {{retryDemoUserId}}
+
+{
+    "itemId": "00000000-0000-0000-0000-000000000002",
+    "quantity": 1
+}
+
+### Async Fan-Out Retry Demo - place order
+# Before running this request, restart notification-service with NOTIFICATION_SIMULATION_MODE=FailFirstAttempt.
+POST {{baseUrl}}/api/orders
+Content-Type: application/json
+X-User-Id: {{retryDemoUserId}}
+X-Payment-Scenario: Success
+
+{
+    "deliveryOptionId": "00000000-0000-0000-0001-000000000001",
+    "paymentOptionId": "00000000-0000-0000-0002-000000000001",
+    "shippingAddress": {
+        "street": "200 Retry Street",
+        "city": "Chicago",
+        "postalCode": "60601",
+        "country": "USA"
+    }
+}

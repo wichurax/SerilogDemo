@@ -9,6 +9,9 @@ WORKDIR /src
 
 # Copy csproj and restore dependencies (cached layer)
 COPY ["SerilogDemo.csproj", "."]
+COPY ["PaymentGateway.Contracts/PaymentGateway.Contracts.csproj", "PaymentGateway.Contracts/"]
+COPY ["SerilogDemo.Hosting/SerilogDemo.Hosting.csproj", "SerilogDemo.Hosting/"]
+COPY ["SerilogDemo.Messaging/SerilogDemo.Messaging.csproj", "SerilogDemo.Messaging/"]
 RUN dotnet restore "SerilogDemo.csproj"
 
 # Copy source and build

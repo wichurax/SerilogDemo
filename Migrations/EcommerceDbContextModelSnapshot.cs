@@ -17,7 +17,7 @@ namespace SerilogDemo.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.10")
+                .HasAnnotation("ProductVersion", "8.0.25")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -120,6 +120,35 @@ namespace SerilogDemo.Migrations
                     b.ToTable("DeliveryOptions");
                 });
 
+            modelBuilder.Entity("SerilogDemo.Models.InboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MessageId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("ProcessedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MessageId")
+                        .IsUnique();
+
+                    b.HasIndex("ProcessedAtUtc");
+
+                    b.ToTable("InboxMessages");
+                });
+
             modelBuilder.Entity("SerilogDemo.Models.Item", b =>
                 {
                     b.Property<Guid>("Id")
@@ -173,6 +202,27 @@ namespace SerilogDemo.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<DateTime?>("FulfillmentDispatchedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FulfillmentLastMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("FulfillmentLastUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FulfillmentStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FulfillmentTrackingReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FulfillmentWarehouse")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<decimal>("ItemsTotal")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -182,8 +232,22 @@ namespace SerilogDemo.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid?>("PaymentAttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentFailureReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<Guid>("PaymentOptionId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("PaymentProviderCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -242,6 +306,56 @@ namespace SerilogDemo.Migrations
                     b.ToTable("OrderItems");
                 });
 
+            modelBuilder.Entity("SerilogDemo.Models.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RoutingKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TraceParent")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("TraceState")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurredAtUtc");
+
+                    b.HasIndex("PublishedAtUtc");
+
+                    b.ToTable("OutboxMessages");
+                });
+
             modelBuilder.Entity("SerilogDemo.Models.PaymentOption", b =>
                 {
                     b.Property<Guid>("Id")
@@ -268,6 +382,46 @@ namespace SerilogDemo.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("PaymentOptions");
+                });
+
+            modelBuilder.Entity("SerilogDemo.Models.WarehouseInventory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("QuantityOnHand")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuantityReserved")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WarehouseName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ItemId");
+
+                    b.HasIndex("WarehouseName", "ItemId")
+                        .IsUnique();
+
+                    b.ToTable("WarehouseInventories", t =>
+                        {
+                            t.HasCheckConstraint("CK_WarehouseInventories_QuantityOnHand_NonNegative", "\"QuantityOnHand\" >= 0");
+
+                            t.HasCheckConstraint("CK_WarehouseInventories_QuantityReserved_NonNegative", "\"QuantityReserved\" >= 0");
+
+                            t.HasCheckConstraint("CK_WarehouseInventories_Reserved_NotGreaterThanOnHand", "\"QuantityReserved\" <= \"QuantityOnHand\"");
+                        });
                 });
 
             modelBuilder.Entity("SerilogDemo.Models.BasketItem", b =>
@@ -319,9 +473,25 @@ namespace SerilogDemo.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("SerilogDemo.Models.WarehouseInventory", b =>
+                {
+                    b.HasOne("SerilogDemo.Models.Item", "Item")
+                        .WithMany("WarehouseInventories")
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Item");
+                });
+
             modelBuilder.Entity("SerilogDemo.Models.Basket", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("SerilogDemo.Models.Item", b =>
+                {
+                    b.Navigation("WarehouseInventories");
                 });
 
             modelBuilder.Entity("SerilogDemo.Models.Order", b =>

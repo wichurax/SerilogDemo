@@ -1,0 +1,35 @@
+@PaymentGateway_HostAddress = http://localhost:5246
+
+POST {{PaymentGateway_HostAddress}}/api/payments/authorize
+Content-Type: application/json
+
+{
+	"idempotencyKey": "order:demo-001:payment:authorize",
+	"orderReference": "ORD-DEMO-001",
+	"userId": "user-demo",
+	"paymentMethodCode": "credit-card",
+	"amount": 249.99,
+	"currency": "USD",
+	"scenario": "success"
+}
+
+###
+
+POST {{PaymentGateway_HostAddress}}/api/payments/authorize
+Content-Type: application/json
+
+{
+	"idempotencyKey": "order:demo-002:payment:authorize",
+	"orderReference": "ORD-DEMO-002",
+	"userId": "user-demo",
+	"paymentMethodCode": "paypal",
+	"amount": 249.99,
+	"currency": "USD",
+	"scenario": "decline"
+}
+
+###
+
+GET {{PaymentGateway_HostAddress}}/health
+Accept: application/json
+###

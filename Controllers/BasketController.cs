@@ -4,6 +4,7 @@ using System.Diagnostics;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
 using SerilogDemo.Models;
+using SerilogDemo.Services.Inventory;
 using SerilogDemo.Telemetry;
 
 namespace SerilogDemo.Controllers;
@@ -13,11 +14,13 @@ namespace SerilogDemo.Controllers;
 public class BasketController : ControllerBase
 {
     private readonly EcommerceDbContext _context;
+    private readonly IInventoryService _inventoryService;
     private readonly ILogger<BasketController> _logger;
 
-    public BasketController(EcommerceDbContext context, ILogger<BasketController> logger)
+    public BasketController(EcommerceDbContext context, IInventoryService inventoryService, ILogger<BasketController> logger)
     {
         _context = context;
+        _inventoryService = inventoryService;
         _logger = logger;
     }
 
@@ -51,8 +54,8 @@ public class BasketController : ControllerBase
         _logger.LogInformation("Fetching basket for user {UserId}", userId);
 
         var basket = await _context.Baskets
+            .AsNoTracking()
             .Include(b => b.Items)
-            .ThenInclude(bi => bi.Item)
             .FirstOrDefaultAsync(b => b.UserId == userId);
 
         if (basket is null)
@@ -71,7 +74,7 @@ public class BasketController : ControllerBase
     /// Add an item to the basket.
     /// </summary>
     [HttpPost("items")]
-    public async Task<ActionResult<BasketDto>> AddToBasket([FromBody] AddToBasketRequest request)
+    public async Task<ActionResult<BasketDto>> AddToBasket([FromBody] AddToBasketRequest request, CancellationToken cancellationToken)
     {
         string userId;
         try
@@ -92,7 +95,16 @@ public class BasketController : ControllerBase
         _logger.LogInformation("Adding item {ItemId} (quantity: {Quantity}) to basket for user {UserId}",
             request.ItemId, request.Quantity, userId);
 
-        var item = await _context.Items.FindAsync(request.ItemId);
+        var item = await _context.Items
+            .AsNoTracking()
+            .Where(catalogItem => catalogItem.Id == request.ItemId)
+            .Select(catalogItem => new
+            {
+                catalogItem.Id,
+                catalogItem.Name,
+                catalogItem.Price
+            })
+            .SingleOrDefaultAsync(cancellationToken);
         if (item is null)
         {
             _logger.LogWarning("Item {ItemId} not found when adding to basket", request.ItemId);
@@ -101,7 +113,7 @@ public class BasketController : ControllerBase
 
         var basket = await _context.Baskets
             .Include(b => b.Items)
-            .FirstOrDefaultAsync(b => b.UserId == userId);
+            .FirstOrDefaultAsync(b => b.UserId == userId, cancellationToken);
 
         if (basket is null)
         {
@@ -115,6 +127,13 @@ public class BasketController : ControllerBase
         }
 
         var existingItem = basket.Items.FirstOrDefault(bi => bi.ItemId == request.ItemId);
+        var requestedQuantity = (existingItem?.Quantity ?? 0) + request.Quantity;
+        var availableQuantity = await GetAvailableQuantityAsync(request.ItemId, cancellationToken);
+        if (requestedQuantity > availableQuantity)
+        {
+            return Conflict(new { message = $"Only {availableQuantity} units are available in the warehouse." });
+        }
+
         if (existingItem is not null)
         {
             existingItem.Quantity += request.Quantity;
@@ -141,9 +160,9 @@ public class BasketController : ControllerBase
 
         // Reload with navigation properties
         basket = await _context.Baskets
+            .AsNoTracking()
             .Include(b => b.Items)
-            .ThenInclude(bi => bi.Item)
-            .FirstAsync(b => b.Id == basket.Id);
+            .FirstAsync(b => b.Id == basket.Id, cancellationToken);
 
         var dto = MapToDto(basket);
         EcommerceMetrics.BasketMutations.Add(1, new TagList
@@ -160,7 +179,7 @@ public class BasketController : ControllerBase
     /// Update quantity of an item in the basket.
     /// </summary>
     [HttpPut("items/{itemId:guid}")]
-    public async Task<ActionResult<BasketDto>> UpdateBasketItem(Guid itemId, [FromBody] UpdateBasketItemRequest request)
+    public async Task<ActionResult<BasketDto>> UpdateBasketItem(Guid itemId, [FromBody] UpdateBasketItemRequest request, CancellationToken cancellationToken)
     {
         string userId;
         try
@@ -177,8 +196,7 @@ public class BasketController : ControllerBase
 
         var basket = await _context.Baskets
             .Include(b => b.Items)
-            .ThenInclude(bi => bi.Item)
-            .FirstOrDefaultAsync(b => b.UserId == userId);
+            .FirstOrDefaultAsync(b => b.UserId == userId, cancellationToken);
 
         if (basket is null)
         {
@@ -202,6 +220,12 @@ public class BasketController : ControllerBase
         }
         else
         {
+            var availableQuantity = await GetAvailableQuantityAsync(itemId, cancellationToken);
+            if (request.Quantity > availableQuantity)
+            {
+                return Conflict(new { message = $"Only {availableQuantity} units are available in the warehouse." });
+            }
+
             basketItem.Quantity = request.Quantity;
             _logger.LogInformation("Updated item {ItemId} quantity to {Quantity}", itemId, request.Quantity);
         }
@@ -238,7 +262,6 @@ public class BasketController : ControllerBase
 
         var basket = await _context.Baskets
             .Include(b => b.Items)
-            .ThenInclude(bi => bi.Item)
             .FirstOrDefaultAsync(b => b.UserId == userId);
 
         if (basket is null)
@@ -331,4 +354,11 @@ public class BasketController : ControllerBase
             basket.UpdatedAt
         );
     }
+
+    private async Task<int> GetAvailableQuantityAsync(Guid itemId, CancellationToken cancellationToken) =>
+        await _context.WarehouseInventories
+            .AsNoTracking()
+            .Where(inventory => inventory.WarehouseName == _inventoryService.WarehouseName && inventory.ItemId == itemId)
+            .Select(inventory => inventory.QuantityOnHand - inventory.QuantityReserved)
+            .SingleOrDefaultAsync(cancellationToken);
 }

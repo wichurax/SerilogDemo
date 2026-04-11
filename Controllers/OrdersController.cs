@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Diagnostics;
+using PaymentGateway.Contracts;
 using SerilogDemo.Data;
 using SerilogDemo.DTOs;
 using SerilogDemo.Models;
-using SerilogDemo.Telemetry;
+using SerilogDemo.Services.Checkout;
 
 namespace SerilogDemo.Controllers;
 
@@ -13,11 +13,13 @@ namespace SerilogDemo.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly EcommerceDbContext _context;
+    private readonly ICheckoutService _checkoutService;
     private readonly ILogger<OrdersController> _logger;
 
-    public OrdersController(EcommerceDbContext context, ILogger<OrdersController> logger)
+    public OrdersController(EcommerceDbContext context, ICheckoutService checkoutService, ILogger<OrdersController> logger)
     {
         _context = context;
+        _checkoutService = checkoutService;
         _logger = logger;
     }
 
@@ -57,6 +59,8 @@ public class OrdersController : ControllerBase
                 o.OrderNumber,
                 o.TotalPrice,
                 o.Status.ToString(),
+                o.FulfillmentStatus.ToString(),
+                o.FulfillmentStatus == OrderFulfillmentStatus.Shipped,
                 o.CreatedAt
             ))
             .ToListAsync();
@@ -84,6 +88,7 @@ public class OrdersController : ControllerBase
         _logger.LogInformation("Fetching order {OrderId} for user {UserId}", id, userId);
 
         var order = await _context.Orders
+            .AsNoTracking()
             .Include(o => o.Items)
             .Include(o => o.DeliveryOption)
             .Include(o => o.PaymentOption)
@@ -120,6 +125,7 @@ public class OrdersController : ControllerBase
         _logger.LogInformation("Fetching order by number {OrderNumber} for user {UserId}", orderNumber, userId);
 
         var order = await _context.Orders
+            .AsNoTracking()
             .Include(o => o.Items)
             .Include(o => o.DeliveryOption)
             .Include(o => o.PaymentOption)
@@ -152,126 +158,42 @@ public class OrdersController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
 
-        _logger.LogInformation(
-            "Placing order for user {UserId} with delivery option {DeliveryOptionId} and payment option {PaymentOptionId}",
-            userId, request.DeliveryOptionId, request.PaymentOptionId);
+        var paymentScenario = ParsePaymentScenario(Request.Headers["X-Payment-Scenario"].FirstOrDefault());
+        var checkoutResult = await _checkoutService.PlaceOrderAsync(userId, request, paymentScenario, HttpContext.RequestAborted);
 
-        // Get the basket
-        var basket = await _context.Baskets
-            .Include(b => b.Items)
-            .ThenInclude(bi => bi.Item)
-            .FirstOrDefaultAsync(b => b.UserId == userId);
-
-        if (basket is null || !basket.Items.Any())
+        if (checkoutResult.Outcome == CheckoutOutcome.ValidationFailed)
         {
-            _logger.LogWarning("Cannot place order for user {UserId}: basket is empty", userId);
-            return BadRequest(new { message = "Cannot place order with an empty basket" });
+            return BadRequest(new { message = checkoutResult.Message });
         }
 
-        // Validate delivery option
-        var deliveryOption = await _context.DeliveryOptions.FindAsync(request.DeliveryOptionId);
-        if (deliveryOption is null || !deliveryOption.IsActive)
-        {
-            _logger.LogWarning("Invalid delivery option {DeliveryOptionId}", request.DeliveryOptionId);
-            return BadRequest(new { message = "Invalid delivery option" });
-        }
+        var order = checkoutResult.Order!;
+        var dto = MapToDto(order);
 
-        // Validate payment option
-        var paymentOption = await _context.PaymentOptions.FindAsync(request.PaymentOptionId);
-        if (paymentOption is null || !paymentOption.IsActive)
+        return checkoutResult.Outcome switch
         {
-            _logger.LogWarning("Invalid payment option {PaymentOptionId}", request.PaymentOptionId);
-            return BadRequest(new { message = "Invalid payment option" });
-        }
-
-        // Create the order
-        var orderNumber = GenerateOrderNumber();
-        var itemsTotal = basket.TotalPrice;
-        var order = new Order
-        {
-            Id = Guid.NewGuid(),
-            OrderNumber = orderNumber,
-            UserId = userId,
-            DeliveryOptionId = deliveryOption.Id,
-            DeliveryPrice = deliveryOption.Price,
-            PaymentOptionId = paymentOption.Id,
-            ItemsTotal = itemsTotal,
-            TotalPrice = itemsTotal + deliveryOption.Price,
-            Status = OrderStatus.Pending,
-            Items = basket.Items.Select(bi => new OrderItem
+            CheckoutOutcome.Authorized => CreatedAtAction(nameof(GetOrder), new { id = order.Id }, dto),
+            CheckoutOutcome.Declined => Conflict(new
             {
-                Id = Guid.NewGuid(),
-                ItemId = bi.ItemId,
-                ItemName = bi.ItemName,
-                UnitPrice = bi.UnitPrice,
-                Quantity = bi.Quantity
-            }).ToList()
+                message = checkoutResult.Message,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                paymentStatus = order.PaymentStatus.ToString(),
+                paymentProviderCode = order.PaymentProviderCode
+            }),
+            CheckoutOutcome.TimedOut => StatusCode(StatusCodes.Status202Accepted, new
+            {
+                message = checkoutResult.Message,
+                orderId = order.Id,
+                orderNumber = order.OrderNumber,
+                paymentStatus = order.PaymentStatus.ToString(),
+                paymentProviderCode = order.PaymentProviderCode
+            }),
+            _ => BadRequest(new { message = checkoutResult.Message })
         };
-
-        _context.Orders.Add(order);
-
-        // Clear the basket
-        _context.BasketItems.RemoveRange(basket.Items);
-        _context.Baskets.Remove(basket);
-
-        await _context.SaveChangesAsync();
-
-        EcommerceMetrics.OrdersPlaced.Add(1, new TagList
-        {
-            { "delivery_courier", deliveryOption.CourierName }
-        });
-        EcommerceMetrics.OrderTotals.Record((double)order.TotalPrice, new TagList
-        {
-            { "delivery_courier", deliveryOption.CourierName }
-        });
-
-        // Log order details for demo purposes
-        _logger.LogInformation(
-            "Order placed successfully. OrderId: {OrderId}, OrderNumber: {OrderNumber}, UserId: {UserId}, " +
-            "ItemsCount: {ItemsCount}, ItemsTotal: {ItemsTotal:C}, DeliveryOption: {DeliveryOption}, " +
-            "DeliveryPrice: {DeliveryPrice:C}, PaymentOption: {PaymentOption}, TotalPrice: {TotalPrice:C}",
-            order.Id,
-            order.OrderNumber,
-            userId,
-            order.Items.Count,
-            order.ItemsTotal,
-            deliveryOption.Name,
-            order.DeliveryPrice,
-            paymentOption.Name,
-            order.TotalPrice);
-
-        // Log each item in the order
-        foreach (var item in order.Items)
-        {
-            _logger.LogInformation(
-                "Order {OrderNumber} item: {ItemName}, Quantity: {Quantity}, UnitPrice: {UnitPrice:C}, Total: {Total:C}",
-                order.OrderNumber,
-                item.ItemName,
-                item.Quantity,
-                item.UnitPrice,
-                item.TotalPrice);
-        }
-
-        // Reload with navigation properties for response
-        order = await _context.Orders
-            .Include(o => o.Items)
-            .Include(o => o.DeliveryOption)
-            .Include(o => o.PaymentOption)
-            .FirstAsync(o => o.Id == order.Id);
-
-        return CreatedAtAction(nameof(GetOrder), new { id = order.Id }, MapToDto(order));
     }
 
-    private static string GenerateOrderNumber()
-    {
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
-        var uniqueSuffix = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-        return $"ORD-{timestamp}-{uniqueSuffix}";
-    }
-
-    private static OrderDto MapToDto(Order order)
-    {
-        return new OrderDto(
+    private static OrderDto MapToDto(Order order) => 
+        new(
             order.Id,
             order.OrderNumber,
             order.UserId,
@@ -302,7 +224,30 @@ public class OrdersController : ControllerBase
             order.ItemsTotal,
             order.TotalPrice,
             order.Status.ToString(),
+            order.PaymentStatus.ToString(),
+            order.PaymentAttemptId,
+            order.PaymentProviderCode,
+            order.PaymentFailureReason,
+            new OrderFulfillmentDto(
+                order.FulfillmentStatus.ToString(),
+                order.FulfillmentWarehouse,
+                order.FulfillmentStatus == OrderFulfillmentStatus.Shipped,
+                order.FulfillmentTrackingReference,
+                order.FulfillmentLastMessage,
+                order.FulfillmentDispatchedAtUtc,
+                order.FulfillmentLastUpdatedAtUtc),
             order.CreatedAt
         );
+
+    private static PaymentScenario? ParsePaymentScenario(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return Enum.TryParse<PaymentScenario>(value, ignoreCase: true, out var scenario)
+            ? scenario
+            : null;
     }
 }

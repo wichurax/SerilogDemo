@@ -22,6 +22,16 @@ public class Order
     public decimal TotalPrice { get; set; }
     
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
+    public PaymentStatus PaymentStatus { get; set; } = PaymentStatus.Pending;
+    public OrderFulfillmentStatus FulfillmentStatus { get; set; } = OrderFulfillmentStatus.Pending;
+    public string? FulfillmentWarehouse { get; set; }
+    public string? FulfillmentTrackingReference { get; set; }
+    public string? FulfillmentLastMessage { get; set; }
+    public DateTime? FulfillmentDispatchedAtUtc { get; set; }
+    public DateTime? FulfillmentLastUpdatedAtUtc { get; set; }
+    public Guid? PaymentAttemptId { get; set; }
+    public string? PaymentProviderCode { get; set; }
+    public string? PaymentFailureReason { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -33,4 +43,22 @@ public enum OrderStatus
     Shipped,
     Delivered,
     Cancelled
+}
+
+public enum PaymentStatus
+{
+    Pending,
+    Authorized,
+    Declined,
+    TimedOut
+}
+
+// Order of this enum matters! Do not change the order without adjusting related code (e.g. in OrderService, FullfillmentService)
+public enum OrderFulfillmentStatus
+{
+    Pending,
+    Reserved,
+    Collected,
+    Packed,
+    Shipped
 }

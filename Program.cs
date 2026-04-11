@@ -1,106 +1,29 @@
 using Microsoft.EntityFrameworkCore;
-using OpenTelemetry.Exporter;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using SerilogDemo.Options;
+using SerilogDemo.Services.Checkout;
+using SerilogDemo.Services.Inventory;
+using SerilogDemo.Services.Messaging;
+using SerilogDemo.Services.Payments;
 using Serilog;
 using SerilogDemo.Data;
+using SerilogDemo.Hosting.Messaging;
+using SerilogDemo.Hosting.Observability;
 using SerilogDemo.Telemetry;
 
 var builder = WebApplication.CreateBuilder(args);
+var observability = builder.AddConfiguredObservability("serilogdemo-api");
 
-var serviceName = builder.Configuration["OpenTelemetry:ServiceName"]
-    ?? Environment.GetEnvironmentVariable("OTEL_SERVICE_NAME")
-    ?? "serilogdemo-api";
-
-var instanceId = builder.Configuration["OpenTelemetry:InstanceId"]
-    ?? Environment.GetEnvironmentVariable("INSTANCE_ID")
-    ?? Environment.MachineName;
-
-var otlpEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT")
-    ?? builder.Configuration["OpenTelemetry:OtlpEndpoint"]
-    ?? "http://localhost:4318";
-
-var otlpTracesEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT")
-    ?? builder.Configuration["OpenTelemetry:TracesEndpoint"]
-    ?? GetOtlpSignalEndpoint(otlpEndpoint, "traces");
-
-var otlpMetricsEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT")
-    ?? builder.Configuration["OpenTelemetry:MetricsEndpoint"]
-    ?? GetOtlpSignalEndpoint(otlpEndpoint, "metrics");
-
-var otlpLogsEndpoint = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-    ?? builder.Configuration["OpenTelemetry:LogsEndpoint"]
-    ?? GetOtlpSignalEndpoint(otlpEndpoint, "logs");
-
-var otlpProtocol = Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_PROTOCOL")
-    ?? builder.Configuration["OpenTelemetry:Protocol"]
-    ?? "http/protobuf";
-
-var serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0";
-var environmentName = builder.Environment.EnvironmentName;
-
-var resourceAttributes = builder.Configuration
-    .GetSection("OpenTelemetry:ResourceAttributes")
-    .GetChildren()
-    .Where(child => !string.IsNullOrWhiteSpace(child.Value))
-    .ToDictionary(child => child.Key, child => (object)child.Value!);
-
-MergeResourceAttributes(resourceAttributes, Environment.GetEnvironmentVariable("OTEL_RESOURCE_ATTRIBUTES"));
-
-if (!resourceAttributes.ContainsKey("deployment.environment"))
-{
-    resourceAttributes["deployment.environment"] = environmentName;
-}
-
-var otlpExportProtocol = otlpProtocol.Equals("grpc", StringComparison.OrdinalIgnoreCase)
-    ? OtlpExportProtocol.Grpc
-    : OtlpExportProtocol.HttpProtobuf;
-
-void ConfigureTraceOtlpExporter(OtlpExporterOptions options)
-{
-    options.Endpoint = new Uri(otlpTracesEndpoint);
-    options.Protocol = otlpExportProtocol;
-}
-
-void ConfigureMetricOtlpExporter(OtlpExporterOptions options)
-{
-    options.Endpoint = new Uri(otlpMetricsEndpoint);
-    options.Protocol = otlpExportProtocol;
-}
-
-// Configure Serilog from appsettings.json
-// Override OTLP endpoint from environment variable for Docker support
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:endpoint"] = otlpLogsEndpoint;
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:protocol"] = GetSerilogOtlpProtocol(otlpProtocol);
-foreach (var resourceAttribute in resourceAttributes)
-{
-    builder.Configuration[$"Serilog:WriteTo:LokiSink:Args:resourceAttributes:{resourceAttribute.Key}"] = resourceAttribute.Value.ToString();
-}
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:resourceAttributes:service.name"] = serviceName;
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:resourceAttributes:service.version"] = serviceVersion;
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:resourceAttributes:service.instance.id"] = instanceId;
-builder.Configuration["Serilog:WriteTo:LokiSink:Args:resourceAttributes:deployment.environment"] = environmentName;
-
-builder.Host.UseSerilog((context, services, configuration) => configuration
-    .ReadFrom.Configuration(context.Configuration)
-    .Enrich.WithProperty("ServiceName", serviceName)
-    .Enrich.WithProperty("ServiceVersion", serviceVersion)
-    .Enrich.WithProperty("InstanceId", instanceId));
-
-builder.Services.AddOpenTelemetry()
-    .ConfigureResource(resource =>
-    {
-        resource
-            .AddService(serviceName: serviceName, serviceVersion: serviceVersion, serviceInstanceId: instanceId)
-            .AddAttributes(resourceAttributes.Select(item => new KeyValuePair<string, object>(item.Key, item.Value)));
-    })
+builder.Services.AddConfiguredOpenTelemetry(observability)
     .WithTracing(tracing =>
     {
         tracing
             .AddAspNetCoreInstrumentation(options => options.RecordException = true)
+            .AddSource(EcommerceDiagnostics.ActivitySourceName)
             .AddHttpClientInstrumentation()
-            .AddOtlpExporter(ConfigureTraceOtlpExporter);
+            .AddOtlpExporter(observability.ConfigureTraceExporter);
     })
     .WithMetrics(metrics =>
     {
@@ -109,8 +32,7 @@ builder.Services.AddOpenTelemetry()
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()
-            .AddProcessInstrumentation()
-            .AddOtlpExporter(ConfigureMetricOtlpExporter);
+            .AddOtlpExporter(observability.ConfigureMetricExporter);
     });
 
 // Add services to the container.
@@ -129,6 +51,15 @@ builder.Services.AddSwaggerGen(options =>
 var postgresConnectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException("PostgreSQL connection string is not configured.");
 
+builder.Services.Configure<PaymentGatewayOptions>(builder.Configuration.GetSection(PaymentGatewayOptions.SectionName));
+builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+builder.Services.Configure<WarehouseOptions>(builder.Configuration.GetSection(WarehouseOptions.SectionName));
+builder.Services.AddHttpClient<IPaymentGatewayClient, PaymentGatewayClient>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ICheckoutService, CheckoutService>();
+builder.Services.AddHostedService<OutboxPublisherService>();
+builder.Services.AddHostedService<FulfillmentProgressConsumerService>();
+
 // Add health checks
 builder.Services.AddHealthChecks().AddNpgSql(postgresConnectionString);
 
@@ -142,10 +73,11 @@ using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<EcommerceDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<EcommerceDbContext>>();
+    var warehouseOptions = scope.ServiceProvider.GetRequiredService<IOptions<WarehouseOptions>>();
 
     try
     {
-        await DbSeeder.SeedAsync(context, logger);
+        await DbSeeder.SeedAsync(context, logger, warehouseOptions);
     }
     catch (Exception ex)
     {
@@ -187,50 +119,4 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
-}
-
-static void MergeResourceAttributes(IDictionary<string, object> resourceAttributes, string? serializedAttributes)
-{
-    if (string.IsNullOrWhiteSpace(serializedAttributes))
-    {
-        return;
-    }
-
-    foreach (var attribute in serializedAttributes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-    {
-        var separatorIndex = attribute.IndexOf('=');
-        if (separatorIndex <= 0 || separatorIndex == attribute.Length - 1)
-        {
-            continue;
-        }
-
-        var key = attribute[..separatorIndex].Trim();
-        var value = attribute[(separatorIndex + 1)..].Trim();
-
-        if (key.Length == 0 || value.Length == 0)
-        {
-            continue;
-        }
-
-        resourceAttributes[key] = value;
-    }
-}
-
-static string GetOtlpSignalEndpoint(string otlpEndpoint, string signal)
-{
-    var expectedSuffix = $"/v1/{signal}";
-
-    if (otlpEndpoint.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
-    {
-        return otlpEndpoint;
-    }
-
-    return $"{otlpEndpoint.TrimEnd('/')}{expectedSuffix}";
-}
-
-static string GetSerilogOtlpProtocol(string otlpProtocol)
-{
-    return otlpProtocol.Equals("grpc", StringComparison.OrdinalIgnoreCase)
-        ? "Grpc"
-        : "HttpProtobuf";
 }

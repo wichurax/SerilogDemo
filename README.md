@@ -1,290 +1,173 @@
 # OpenTelemetry E-Commerce Demo
 
-This project demonstrates OpenTelemetry observability in a C# e-commerce API with Grafana visualization, Loki logs, Tempo traces, Prometheus metrics, and PostgreSQL persistence.
+This repository is a local, Docker-first demo of a moderately distributed e-commerce system instrumented with OpenTelemetry. The goal is to keep the domain simple while still showing realistic trace, log, metric, retry, and service-boundary examples.
 
-Main branch is starting point. Each post of Serilog series posted on mateusz-dev.pl/blog has separate branch. This approach allows you to quickly fetch desired code and start building your own solution :)
+Main branch is the starting point. Individual blog-post states live on separate branches.
 
-Whole repo/code is open-source. Feel free to copy-paste and modify code to your liking.
+## What This Repo Demonstrates
+
+- A main e-commerce API behind Nginx
+- A synchronous payment hop for clear end-to-end traces
+- An asynchronous RabbitMQ fan-out for eventually consistent side effects
+- Correlated traces, logs, and metrics across multiple .NET services
+- A fully local observability stack with Grafana, Loki, Tempo, Prometheus, and PostgreSQL
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    Client[Client] --> LB[Nginx Load Balancer<br/>:8080]
+  Client[Client] --> LB[Nginx Load Balancer<br/>:8080]
+  LB --> API[Main API]
+  API --> PGW[Payment Gateway]
+  API --> DB[(PostgreSQL)]
+  PGW --> DB
+  API --> RMQ[(RabbitMQ)]
+  RMQ --> NOTIFY[Notification Service]
+  RMQ --> FULFILL[Fulfillment Service]
+  NOTIFY --> DB
+  FULFILL --> DB
 
-    subgraph ApiLayer["API Layer"]
-        LB --> API1[API Instance 1]
-        LB --> API2[API Instance 2]
-        LB --> API3[API Instance N...]
-    end
-    
-    subgraph Telemetry
-      API1 & API2 & API3 --> OTel[OpenTelemetry Collector<br/>:4317]
-      OTel --> Loki[Loki<br/>:3100]
-      OTel --> Tempo[Tempo<br/>:3200]
-      OTel --> Prom[Prometheus<br/>:9090]
-    end
+  API --> OTel[OpenTelemetry Collector<br/>:4318]
+  PGW --> OTel
+  NOTIFY --> OTel
+  FULFILL --> OTel
+  OTel --> Loki[Loki]
+  OTel --> Tempo[Tempo]
+  OTel --> Prom[Prometheus]
+  Loki --> Grafana[Grafana]
+  Tempo --> Grafana
+  Prom --> Grafana
 
-    subgraph Infrastructure
-        API1 & API2 & API3 --> PG[(PostgreSQL<br/>:5432)]
-      Loki & Tempo & Prom --> Grafana[Grafana<br/>:3000]
-    end
-    
-    subgraph LoadTest["Load Testing (--profile loadtest)"]
-        K6[k6 Load Tester] --> LB
-    end
+  K6[k6 Load Test] --> LB
 ```
 
-## Database Schema
+## Main Flow
 
-```mermaid
-erDiagram
-    Item {
-        guid Id PK
-        string Name
-        string Description
-        decimal Price
-        string Category
-        string ImageUrl
-        datetime CreatedAt
-    }
-    
-    Basket {
-        guid Id PK
-        string UserId UK
-        datetime CreatedAt
-        datetime UpdatedAt
-    }
-    
-    BasketItem {
-        guid Id PK
-        guid BasketId FK
-        guid ItemId FK
-        string ItemName
-        decimal UnitPrice
-        int Quantity
-        datetime AddedAt
-    }
-    
-    DeliveryOption {
-        guid Id PK
-        string CourierName
-        string Name
-        string Description
-        decimal Price
-        int EstimatedDaysMin
-        int EstimatedDaysMax
-    }
-    
-    PaymentOption {
-        guid Id PK
-        string Name
-        string Description
-        string Icon
-    }
-    
-    Order {
-        guid Id PK
-        string OrderNumber UK
-        string UserId
-        guid DeliveryOptionId FK
-        guid PaymentOptionId FK
-        decimal ItemsTotal
-        decimal DeliveryPrice
-        decimal TotalPrice
-        string ShippingAddress
-        OrderStatus Status
-        datetime CreatedAt
-    }
-    
-    OrderItem {
-        guid Id PK
-        guid OrderId FK
-        guid ItemId FK
-        string ItemName
-        decimal UnitPrice
-        int Quantity
-    }
-    
-    Basket ||--o{ BasketItem : contains
-    BasketItem }o--|| Item : references
-    Order ||--o{ OrderItem : contains
-    OrderItem }o--|| Item : references
-    Order }o--|| DeliveryOption : uses
-    Order }o--|| PaymentOption : uses
-```
+1. A client calls the main API through Nginx.
+2. The main API validates basket and order data.
+3. The main API calls the Payment Gateway synchronously.
+4. On success, the main API stores an outbox record.
+5. The outbox publisher sends an `order.paid` event to RabbitMQ.
+6. Notification Service and Fulfillment Service each consume the same event from their own queue.
+7. Notification can intentionally fail on the first attempt and succeed on retry for a deterministic demo.
 
-## Features
+This gives one synchronous trace segment and two asynchronous, broker-backed follow-up paths.
 
-- **E-Commerce API** - Items catalog, shopping basket, delivery/payment options, order placement
-- **OpenTelemetry Signals** - Traces, metrics, and logs exported via OTLP
-- **Grafana Stack** - Loki logs, Tempo traces, Prometheus metrics in one UI
-- **Structured Logging** - All API operations log structured data with properties like UserId, OrderId, ItemId
-- **PostgreSQL** - Persistent data storage with Entity Framework Core
-- **Single Docker Entry Point** - Nginx fronts the API in both default and scaled runs
-- **Load Testing** - k6-based load testing for benchmarking
+## Runnable Components
 
-## Prerequisites
+- Main API: this README and [SerilogDemo.http](SerilogDemo.http)
+- Payment Gateway: [PaymentGateway/README.md](PaymentGateway/README.md)
+- Notification Service: [NotificationService/README.md](NotificationService/README.md)
+- Fulfillment Service: [FulfillmentService/README.md](FulfillmentService/README.md)
+- Log Search Tools: [LogSearchTools/README.md](LogSearchTools/README.md)
+- Observability Demo Queries: [observability/demo-queries.md](observability/demo-queries.md)
+- Workshop Script: [observability/workshop-script.md](observability/workshop-script.md)
 
-- Docker and Docker Compose installed
-- .NET 8.0 SDK (for local development)
+## Main API
+
+The main API is the front door of the system. It owns the catalog, basket, delivery and payment-option lookup, order placement, payment orchestration, and outbox publication.
+
+### Main API Features
+
+- Catalog, basket, delivery, payment-option, and order endpoints
+- Checkout orchestration with manual business spans
+- Synchronous Payment Gateway integration
+- Outbox persistence and RabbitMQ publishing for `order.paid`
+- RabbitMQ fan-out to notification and fulfillment consumers with propagated trace context
+- Structured logs and custom metrics for checkout flow
+
+### Main API Required Configuration
+
+- `ConnectionStrings__Postgres`: PostgreSQL connection string
+- `PaymentGateway__BaseUrl`: Payment Gateway base URL
+- `RabbitMq__HostName`: RabbitMQ host
+- `RabbitMq__Port`: RabbitMQ port
+- `RabbitMq__UserName`: RabbitMQ username
+- `RabbitMq__Password`: RabbitMQ password
+- `RabbitMq__VirtualHost`: RabbitMQ virtual host
+- `RabbitMq__PublishEnabled`: enables or disables outbox publishing
+- `RabbitMq__PublishIntervalSeconds`: outbox polling interval
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP base endpoint
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: exporter protocol, expected `http/protobuf`
+- `OTEL_SERVICE_NAME`: logical service name, usually `serilogdemo-api`
+
+Default local values are in [appsettings.json](appsettings.json).
 
 ## Quick Start
 
+### Prerequisites
+
+- Docker with `docker compose`
+- .NET 8 SDK for local development
+
+### Start Everything
+
 ```bash
-# Start infrastructure + one API instance behind Nginx
 docker compose up -d
-
-# Scale the API behind the same Nginx entry point
-docker compose up -d --scale api=3
-
-# Add the load test profile
-docker compose --profile loadtest up -d --scale api=5
-
-# Access points:
-# - API: http://localhost:8080
-# - Swagger: http://localhost:8080/swagger
-# - Grafana: http://localhost:3000 (admin/admin)
 ```
+
+### Scale Only the Main API
+
+```bash
+docker compose up -d --scale api=3
+```
+
+### Enable Load Test Profile
+
+```bash
+docker compose --profile loadtest up -d --scale api=5
+```
+
+### Access Points
+
+- API and Swagger: `http://localhost:8080`
+- Grafana: `http://localhost:3000`
+- RabbitMQ Management: `http://localhost:15672`
+
+## Request Samples
+
+- Main API requests: [SerilogDemo.http](SerilogDemo.http)
+- Payment Gateway requests: [PaymentGateway/PaymentGateway.http](PaymentGateway/PaymentGateway.http)
+
+The main API order endpoint accepts the `X-Payment-Scenario` header for deterministic payment demos.
 
 ## Stopping Services
 
 ```bash
-# Stop the default stack
 docker compose down
-
-# If the load test profile is running, stop that profile too
 docker compose --profile loadtest down
-
-# Also remove volumes
 docker compose --profile loadtest down -v
 ```
 
-## API Requests
+## Observability Notes
 
-All API requests are documented in the [SerilogDemo.http](SerilogDemo.http) file. 
-
-Open this file in VS Code with the [REST Client extension](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) or in JetBrains IDEs to execute requests directly from the editor.
-
-The file covers the main demo flow: browse items, manage a basket, choose delivery and payment options, place an order, and inspect logs.
-
-## API Endpoints
-
-### Items Catalog
-
-| Method | Endpoint                           | Description           |
-| ------ | ---------------------------------- | --------------------- |
-| GET    | `/api/items`                       | Get all items         |
-| GET    | `/api/items/{id}`                  | Get item by ID        |
-| GET    | `/api/items/categories`            | Get all categories    |
-| GET    | `/api/items/categories/{category}` | Get items by category |
-
-### Shopping Basket
-
-All basket endpoints require `X-User-Id` header to identify the user.
-
-| Method | Endpoint                     | Description               |
-| ------ | ---------------------------- | ------------------------- |
-| GET    | `/api/basket`                | Get current user's basket |
-| POST   | `/api/basket/items`          | Add item to basket        |
-| PUT    | `/api/basket/items/{itemId}` | Update item quantity      |
-| DELETE | `/api/basket/items/{itemId}` | Remove item from basket   |
-| DELETE | `/api/basket`                | Clear entire basket       |
-
-### Delivery Options
-
-| Method | Endpoint                           | Description               |
-| ------ | ---------------------------------- | ------------------------- |
-| GET    | `/api/deliveryoptions`             | Get all delivery options  |
-| GET    | `/api/deliveryoptions?courier=DPD` | Filter by courier         |
-| GET    | `/api/deliveryoptions/{id}`        | Get delivery option by ID |
-
-### Payment Options
-
-| Method | Endpoint                   | Description              |
-| ------ | -------------------------- | ------------------------ |
-| GET    | `/api/paymentoptions`      | Get all payment options  |
-| GET    | `/api/paymentoptions/{id}` | Get payment option by ID |
-
-### Orders
-
-All order endpoints require `X-User-Id` header.
-
-| Method | Endpoint           | Description       |
-| ------ | ------------------ | ----------------- |
-| GET    | `/api/orders`      | Get user's orders |
-| GET    | `/api/orders/{id}` | Get order details |
-| POST   | `/api/orders`      | Place an order    |
-
-### Health Check
-
-| Method | Endpoint  | Description                          |
-| ------ | --------- | ------------------------------------ |
-| GET    | `/health` | Health check (used by load balancer) |
-
-## Structured Logging Properties
-
-The application logs structured data with the following key properties:
-
-| Property      | Description                           | Example             |
-| ------------- | ------------------------------------- | ------------------- |
-| `UserId`      | User identifier from X-User-Id header | `user-123`          |
-| `ItemId`      | Product item identifier               | `cc51f197-...`      |
-| `OrderId`     | Order identifier                      | `fe6a2dd1-...`      |
-| `OrderNumber` | Human-readable order number           | `ORD-20260409123045123-1A2B3C4D` |
-| `BasketId`    | Shopping basket identifier            | `58e2d1d1-...`      |
-| `TotalPrice`  | Order/basket total                    | `739.94`            |
-| `Quantity`    | Item quantity                         | `2`                 |
-
-## Load Testing
-
-The project includes a k6 scenario that generates realistic e-commerce traffic against the Nginx entry point. See [k6](k6/load-test.js) configuration for more details.
-
-## Configuration
-
-### OpenTelemetry (appsettings.json)
-
-```json
-{
-  "OpenTelemetry": {
-    "ServiceName": "serilogdemo-api",
-    "Protocol": "http/protobuf",
-    "OtlpEndpoint": "http://localhost:4318"
-  }
-}
-```
-
-### PostgreSQL Connection (appsettings.json)
-
-```json
-{
-  "ConnectionStrings": {
-    "Postgres": "Host=localhost;Port=5432;Database=ecommerce;Username=serilog;Password=serilog123"
-  }
-}
-```
+- All services export OTLP data through the OpenTelemetry Collector.
+- The `order.paid` message carries W3C trace headers so the async consumers continue the producer trace.
+- The demo is designed for trace-to-log correlation across service boundaries.
+- The main API produces the most visible business spans around checkout.
+- The Notification Service demonstrates async retry behavior after the HTTP request has already completed.
+- The Fulfillment Service demonstrates a second independent consumer on the same event.
 
 ## Project Structure
 
 ```
 SerilogDemo/
-├── Controllers/          # API Controllers
-├── Data/                 # EF Core DbContext & Seeder
-├── DTOs/                 # Data Transfer Objects
-├── Models/               # Domain Entities
-├── Migrations/           # EF Core Migrations
-├── k6/                   # Load testing scripts
-│   └── load-test.js
-├── nginx/                # Load balancer config
-│   └── nginx.conf
-├── observability/        # OTEL/Grafana/Prometheus/Tempo/Loki configs
-│   ├── otel-collector-config.yml
-│   ├── grafana-datasources.yml
-│   ├── prometheus.yml
-│   ├── tempo.yml
-│   └── loki-config.yml
-├── docker-compose.yml    # Container orchestration
-├── Dockerfile            # API container image
-├── SerilogDemo.http      # API request examples
-└── appsettings.json      # Application configuration
+├── Controllers/                # Main API controllers
+├── Data/                       # Main API DbContext and seeding
+├── DTOs/                       # Main API contracts
+├── Models/                     # Main API domain entities
+├── Migrations/                 # Main API EF Core migrations
+├── PaymentGateway/             # Synchronous payment service
+├── PaymentGateway.Contracts/   # Shared payment contracts
+├── NotificationService/        # Async notification consumer
+├── FulfillmentService/         # Async fulfillment consumer
+├── SerilogDemo.Messaging/      # Shared integration-event contracts
+├── LogSearchTools/             # Optional log-search benchmark tool
+├── observability/              # Grafana, Tempo, Loki, Prometheus, Collector config
+├── nginx/                      # Nginx load balancer config
+├── k6/                         # Load test scripts
+├── docker-compose.yml          # Full local topology
+├── Dockerfile                  # Main API container image
+├── SerilogDemo.http            # Main API request samples
+└── appsettings.json            # Main API defaults
 ```

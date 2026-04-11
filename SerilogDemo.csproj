@@ -10,32 +10,71 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.10" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.25" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.25">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
-    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.0" />
-    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.0" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.11" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.15.2" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.2" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.15.0" />
-    <PackageReference Include="OpenTelemetry.Instrumentation.Process" Version="1.15.0-beta.1" />
     <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.0" />
-    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageReference Include="Serilog.Enrichers.Environment" Version="3.0.1" />
     <PackageReference Include="Serilog.Sinks.OpenTelemetry" Version="4.2.0" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Exclude LogSearchTools subfolder which has its own project -->
     <Compile Remove="LogSearchTools\**" />
+    <Compile Remove="Migrations\**" />
+    <Compile Remove="NotificationService\**" />
+    <Compile Remove="FulfillmentService\**" />
+    <Compile Remove="PaymentGateway\**" />
+    <Compile Remove="PaymentGateway.Contracts\**" />
+    <Compile Remove="SerilogDemo.IntegrationTests\**" />
+    <Compile Remove="SerilogDemo.Hosting\**" />
+    <Compile Remove="SerilogDemo.Messaging\**" />
     <Content Remove="LogSearchTools\**" />
+    <Content Remove="NotificationService\**" />
+    <Content Remove="FulfillmentService\**" />
+    <Content Remove="PaymentGateway\**" />
+    <Content Remove="PaymentGateway.Contracts\**" />
+    <Content Remove="SerilogDemo.IntegrationTests\**" />
+    <Content Remove="SerilogDemo.Hosting\**" />
+    <Content Remove="SerilogDemo.Messaging\**" />
     <EmbeddedResource Remove="LogSearchTools\**" />
+    <EmbeddedResource Remove="NotificationService\**" />
+    <EmbeddedResource Remove="FulfillmentService\**" />
+    <EmbeddedResource Remove="PaymentGateway\**" />
+    <EmbeddedResource Remove="PaymentGateway.Contracts\**" />
+    <EmbeddedResource Remove="SerilogDemo.IntegrationTests\**" />
+    <EmbeddedResource Remove="SerilogDemo.Hosting\**" />
+    <EmbeddedResource Remove="SerilogDemo.Messaging\**" />
     <None Remove="LogSearchTools\**" />
+    <None Remove="NotificationService\**" />
+    <None Remove="FulfillmentService\**" />
+    <None Remove="PaymentGateway\**" />
+    <None Remove="PaymentGateway.Contracts\**" />
+    <None Remove="SerilogDemo.IntegrationTests\**" />
+    <None Remove="SerilogDemo.Hosting\**" />
+    <None Remove="SerilogDemo.Messaging\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Migrations\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="PaymentGateway.Contracts\PaymentGateway.Contracts.csproj" />
+    <ProjectReference Include="SerilogDemo.Hosting\SerilogDemo.Hosting.csproj" />
+    <ProjectReference Include="SerilogDemo.Messaging\SerilogDemo.Messaging.csproj" />
   </ItemGroup>
 
 </Project>
