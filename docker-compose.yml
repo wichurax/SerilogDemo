@@ -124,6 +124,12 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=guest
       - RABBITMQ_DEFAULT_PASS=guest
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - serilog-network
 
@@ -154,7 +160,7 @@ services:
       payment-gateway:
         condition: service_started
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       otel-collector:
         condition: service_started
     networks:
@@ -195,7 +201,6 @@ services:
       - RabbitMq__UserName=guest
       - RabbitMq__Password=guest
       - RabbitMq__VirtualHost=/
-      - Notification__SimulationMode=${NOTIFICATION_SIMULATION_MODE:-Success}
       - OTEL_SERVICE_NAME=notification-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
@@ -204,7 +209,7 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       otel-collector:
         condition: service_started
     networks:
@@ -225,7 +230,8 @@ services:
       - RabbitMq__Password=guest
       - RabbitMq__VirtualHost=/
       - Fulfillment__WarehouseName=${FULFILLMENT_WAREHOUSE_NAME:-demo-warehouse-01}
-      - Fulfillment__ProcessingDelayMilliseconds=${FULFILLMENT_PROCESSING_DELAY_MS:-350}
+      - Fulfillment__ConsumerPrefetchCount=${FULFILLMENT_CONSUMER_PREFETCH_COUNT:-16}
+      - Fulfillment__OutboxBatchSize=${FULFILLMENT_OUTBOX_BATCH_SIZE:-50}
       - OTEL_SERVICE_NAME=fulfillment-service
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
       - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
@@ -234,7 +240,7 @@ services:
       postgres:
         condition: service_healthy
       rabbitmq:
-        condition: service_started
+        condition: service_healthy
       otel-collector:
         condition: service_started
     networks:
@@ -262,15 +268,54 @@ services:
   # Load Testing (loadtest profile only)
   #---------------------------------------------------------------------------
   
-  k6:
+  k6-ecommerce:
     image: grafana/k6:1.6.1
-    container_name: k6-loadtest
+    container_name: k6-loadtest-ecommerce
     volumes:
       - ./k6:/scripts
     environment:
       - K6_OUT=experimental-prometheus-rw
       - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
     command: run /scripts/load-test.js
+    depends_on:
+      - nginx
+    networks:
+      - serilog-network
+    profiles:
+      - loadtest
+
+  k6-warehouse:
+    image: grafana/k6:1.6.1
+    container_name: k6-loadtest-warehouse
+    volumes:
+      - ./k6:/scripts
+    environment:
+      - FULFILLMENT_URL=http://fulfillment-service:8080
+      - K6_OUT=experimental-prometheus-rw
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+    command: run /scripts/load-test-warehouse.js
+    depends_on:
+      - fulfillment-service
+    networks:
+      - serilog-network
+    profiles:
+      - loadtest
+
+  k6-restock:
+    image: grafana/k6:1.6.1
+    container_name: k6-loadtest-restock
+    volumes:
+      - ./k6:/scripts
+    environment:
+      - API_URL=http://nginx:80
+      - K6_OUT=experimental-prometheus-rw
+      - K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write
+      - RESTOCK_LOW_WATER_MARK=${RESTOCK_LOW_WATER_MARK:-6}
+      - RESTOCK_TARGET_AVAILABLE_QUANTITY=${RESTOCK_TARGET_AVAILABLE_QUANTITY:-18}
+      - RESTOCK_MAX_ITEMS_PER_CYCLE=${RESTOCK_MAX_ITEMS_PER_CYCLE:-3}
+      - RESTOCK_POLL_SECONDS=${RESTOCK_POLL_SECONDS:-8}
+      - RESTOCK_CATEGORY_FILTER=${RESTOCK_CATEGORY_FILTER:-}
+    command: run /scripts/load-test-restock.js
     depends_on:
       - nginx
     networks:

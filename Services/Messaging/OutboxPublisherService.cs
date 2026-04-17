@@ -64,7 +64,11 @@ public sealed class OutboxPublisherService : BackgroundService
             channel,
             MessagingTopology.OrderEventsExchange,
             MessagingTopology.OrderPaidRoutingKey,
-            [MessagingTopology.NotificationQueueName, MessagingTopology.FulfillmentQueueName],
+            [
+                MessagingTopology.EmailNotificationQueueName,
+                MessagingTopology.SmsNotificationQueueName,
+                MessagingTopology.FulfillmentQueueName
+            ],
             cancellationToken);
     }
 
@@ -72,11 +76,18 @@ public sealed class OutboxPublisherService : BackgroundService
     {
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<EcommerceDbContext>();
+        const int batchSize = 20;
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var messages = await dbContext.OutboxMessages
-            .Where(message => message.PublishedAtUtc == null)
-            .OrderBy(message => message.OccurredAtUtc)
-            .Take(20)
+            .FromSqlInterpolated($@"
+                SELECT *
+                FROM ""OutboxMessages""
+                WHERE ""PublishedAtUtc"" IS NULL
+                ORDER BY ""OccurredAtUtc""
+                FOR UPDATE SKIP LOCKED
+                LIMIT {batchSize}")
             .ToListAsync(cancellationToken);
 
         foreach (var message in messages)
@@ -125,5 +136,6 @@ public sealed class OutboxPublisherService : BackgroundService
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 }

@@ -103,7 +103,7 @@ public sealed class CheckoutService : ICheckoutService
                 ItemsTotal = basket.TotalPrice,
                 TotalPrice = basket.TotalPrice + deliveryOption.Price,
                 Status = OrderStatus.Pending,
-                PaymentStatus = Models.PaymentStatus.Pending,
+                PaymentStatus = PaymentStatus.Pending,
                 FulfillmentStatus = OrderFulfillmentStatus.Pending,
                 FulfillmentWarehouse = _inventoryService.WarehouseName,
                 FulfillmentLastMessage = "Awaiting fulfillment reservation acknowledgement.",
@@ -159,7 +159,7 @@ public sealed class CheckoutService : ICheckoutService
             switch (paymentResponse.Status)
             {
                 case PaymentAuthorizationStatus.Authorized:
-                    order.PaymentStatus = Models.PaymentStatus.Authorized;
+                    order.PaymentStatus = PaymentStatus.Authorized;
                     order.Status = OrderStatus.Confirmed;
 
                     using (var finalizeActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.finalize_order", ActivityKind.Internal))
@@ -213,7 +213,7 @@ public sealed class CheckoutService : ICheckoutService
                     break;
 
                 case PaymentAuthorizationStatus.Declined:
-                    order.PaymentStatus = Models.PaymentStatus.Declined;
+                    order.PaymentStatus = PaymentStatus.Declined;
                     order.Status = OrderStatus.Cancelled;
                     order.FulfillmentLastMessage = "Payment declined. Inventory reservation released.";
                     await ReleaseReservedInventoryAsync(orderLines, cancellationToken);
@@ -222,7 +222,7 @@ public sealed class CheckoutService : ICheckoutService
                     break;
 
                 default:
-                    order.PaymentStatus = Models.PaymentStatus.TimedOut;
+                    order.PaymentStatus = PaymentStatus.TimedOut;
                     order.Status = OrderStatus.Cancelled;
                     order.FulfillmentLastMessage = "Payment timed out. Inventory reservation released.";
                     await ReleaseReservedInventoryAsync(orderLines, cancellationToken);

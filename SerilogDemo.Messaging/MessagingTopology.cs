@@ -7,7 +7,8 @@ public static class MessagingTopology
     public const string OrderPaidRoutingKey = "order.paid";
     public const string FulfillmentProgressRoutingKey = "fulfillment.progress";
 
-    public const string NotificationQueueName = "serilogdemo.notifications";
+    public const string EmailNotificationQueueName = "serilogdemo.notifications.email";
+    public const string SmsNotificationQueueName = "serilogdemo.notifications.sms";
 
     public const string FulfillmentQueueName = "serilogdemo.fulfillment";
 

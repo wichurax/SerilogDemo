@@ -53,12 +53,12 @@ public enum PaymentStatus
     TimedOut
 }
 
-// Order of this enum matters! Do not change the order without adjusting related code (e.g. in OrderService, FullfillmentService)
 public enum OrderFulfillmentStatus
 {
     Pending,
     Reserved,
     Collected,
     Packed,
-    Shipped
+    Shipped,
+    Failed
 }

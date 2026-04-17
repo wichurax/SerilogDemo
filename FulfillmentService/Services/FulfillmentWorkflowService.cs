@@ -17,13 +17,39 @@ public sealed class FulfillmentWorkflowService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyCollection<FulfillmentAttempt>> GetAttemptsAsync(CancellationToken cancellationToken) => 
-        await _dbContext.FulfillmentAttempts
+    public async Task<IReadOnlyCollection<FulfillmentAttempt>> GetAttemptsAsync(FulfillmentAttemptQuery query, CancellationToken cancellationToken)
+    {
+        var attemptsQuery = _dbContext.FulfillmentAttempts
             .AsNoTracking()
             .Include(attempt => attempt.Items)
-            .OrderBy(attempt => attempt.Status)
+            .AsQueryable();
+
+        if (query.Status.HasValue)
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.Status == query.Status.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.UserId))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.UserId == query.UserId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.OrderNumber))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.OrderNumber == query.OrderNumber);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Warehouse))
+        {
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.Warehouse == query.Warehouse);
+        }
+
+        return await attemptsQuery
+            .OrderByDescending(attempt => attempt.LastProcessedAtUtc)
             .ThenBy(attempt => attempt.OrderNumber)
+            .Take(Math.Clamp(query.Take, 1, 200))
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<FulfillmentTransitionResult> AdvanceAsync(
         Guid orderId,
@@ -36,14 +62,15 @@ public sealed class FulfillmentWorkflowService
         activity?.SetTag("order.id", orderId);
         activity?.SetTag("fulfillment.target_status", targetStatus.ToString());
 
-        var attempt = await _dbContext.FulfillmentAttempts
-            .Include(item => item.Items)
-            .FirstOrDefaultAsync(item => item.OrderId == orderId, cancellationToken);
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var attempt = await LoadAttemptForUpdateAsync(orderId, cancellationToken);
 
         if (attempt is null)
         {
             return FulfillmentTransitionResult.Missing($"Fulfillment attempt for order {orderId} was not found.");
         }
+
+        activity?.SetTag("fulfillment.current_status", attempt.Status.ToString());
 
         if (attempt.Status == targetStatus)
         {
@@ -79,6 +106,7 @@ public sealed class FulfillmentWorkflowService
 
         _dbContext.OutboxMessages.Add(FulfillmentProgressOutboxFactory.Create(attempt, message ?? $"Fulfillment moved to {targetStatus}.", activity));
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
             "Fulfillment for order {OrderNumber} moved to {Status}",
@@ -86,6 +114,62 @@ public sealed class FulfillmentWorkflowService
             attempt.Status);
 
         return FulfillmentTransitionResult.Success(attempt, $"Fulfillment moved to {targetStatus}.");
+    }
+
+    public async Task<FulfillmentTransitionResult> FailAsync(Guid orderId, string? message, CancellationToken cancellationToken)
+    {
+        using var activity = FulfillmentDiagnostics.ActivitySource.StartActivity("fulfillment.mark_failed", ActivityKind.Internal);
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("fulfillment.target_status", FulfillmentStatus.Failed.ToString());
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var attempt = await LoadAttemptForUpdateAsync(orderId, cancellationToken);
+
+        if (attempt is null)
+        {
+            return FulfillmentTransitionResult.Missing($"Fulfillment attempt for order {orderId} was not found.");
+        }
+
+        activity?.SetTag("fulfillment.current_status", attempt.Status.ToString());
+
+        if (attempt.Status == FulfillmentStatus.Failed)
+        {
+            return FulfillmentTransitionResult.Success(attempt, "Fulfillment already marked as failed.");
+        }
+
+        if (attempt.Status == FulfillmentStatus.Shipped)
+        {
+            return FulfillmentTransitionResult.Conflict("Cannot mark shipped fulfillment as failed.");
+        }
+
+        attempt.Status = FulfillmentStatus.Failed;
+        attempt.LastProcessedAtUtc = DateTime.UtcNow;
+        attempt.LastError = string.IsNullOrWhiteSpace(message)
+            ? "Fulfillment marked as failed by operator."
+            : message.Trim();
+
+        _dbContext.OutboxMessages.Add(FulfillmentProgressOutboxFactory.Create(attempt, attempt.LastError, activity));
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        _logger.LogWarning(
+            "Fulfillment for order {OrderNumber} marked as failed. Reason: {Reason}",
+            attempt.OrderNumber,
+            attempt.LastError);
+
+        return FulfillmentTransitionResult.Success(attempt, attempt.LastError);
+    }
+
+    private Task<FulfillmentAttempt?> LoadAttemptForUpdateAsync(Guid orderId, CancellationToken cancellationToken)
+    {
+        return _dbContext.FulfillmentAttempts
+            .FromSqlInterpolated($@"
+                SELECT *
+                FROM fulfillment_service.""FulfillmentAttempts""
+                WHERE ""OrderId"" = {orderId}
+                FOR UPDATE")
+            .Include(attempt => attempt.Items)
+            .FirstOrDefaultAsync(attempt => attempt.OrderId == orderId, cancellationToken);
     }
 
     private static bool IsAllowedTransition(FulfillmentStatus currentStatus, FulfillmentStatus targetStatus)

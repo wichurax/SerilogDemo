@@ -6,5 +6,7 @@ public sealed class FulfillmentServiceOptions
 
     public string WarehouseName { get; set; } = "demo-warehouse-01";
 
-    public int ProcessingDelayMilliseconds { get; set; } = 350;
+    public int ConsumerPrefetchCount { get; set; } = 16;
+
+    public int OutboxBatchSize { get; set; } = 50;
 }

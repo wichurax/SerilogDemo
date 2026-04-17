@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>97ca1cd0-a3c2-4d18-abac-708b6535bfed</UserSecretsId>
+    <GenerateRazorTargetAssemblyInfo>false</GenerateRazorTargetAssemblyInfo>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
   </PropertyGroup>
@@ -36,6 +37,7 @@
     <Compile Remove="Migrations\**" />
     <Compile Remove="NotificationService\**" />
     <Compile Remove="FulfillmentService\**" />
+    <Compile Remove="FulfillmentSimulator\**" />
     <Compile Remove="PaymentGateway\**" />
     <Compile Remove="PaymentGateway.Contracts\**" />
     <Compile Remove="SerilogDemo.IntegrationTests\**" />
@@ -44,6 +46,7 @@
     <Content Remove="LogSearchTools\**" />
     <Content Remove="NotificationService\**" />
     <Content Remove="FulfillmentService\**" />
+    <Content Remove="FulfillmentSimulator\**" />
     <Content Remove="PaymentGateway\**" />
     <Content Remove="PaymentGateway.Contracts\**" />
     <Content Remove="SerilogDemo.IntegrationTests\**" />
@@ -52,6 +55,7 @@
     <EmbeddedResource Remove="LogSearchTools\**" />
     <EmbeddedResource Remove="NotificationService\**" />
     <EmbeddedResource Remove="FulfillmentService\**" />
+    <EmbeddedResource Remove="FulfillmentSimulator\**" />
     <EmbeddedResource Remove="PaymentGateway\**" />
     <EmbeddedResource Remove="PaymentGateway.Contracts\**" />
     <EmbeddedResource Remove="SerilogDemo.IntegrationTests\**" />
@@ -60,6 +64,7 @@
     <None Remove="LogSearchTools\**" />
     <None Remove="NotificationService\**" />
     <None Remove="FulfillmentService\**" />
+    <None Remove="FulfillmentSimulator\**" />
     <None Remove="PaymentGateway\**" />
     <None Remove="PaymentGateway.Contracts\**" />
     <None Remove="SerilogDemo.IntegrationTests\**" />

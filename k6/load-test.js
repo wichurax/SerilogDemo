@@ -1,353 +1,744 @@
 /**
  * k6 Load Test Script for SerilogDemo E-Commerce API
- * 
- * This script simulates high-throughput e-commerce traffic to generate
- * a large volume of structured logs for benchmarking Loki query performance.
- * 
+ *
+ * This script models short customer sessions instead of raw endpoint hammering.
+ * Each iteration creates a fresh session identity so order volume is limited
+ * only by test duration, while still preserving realistic browse, basket,
+ * checkout, and post-purchase polling behavior.
+ *
+ * Pair this with load-test-warehouse.js when you want automated fulfillment
+ * progression during a load run.
+ *
  * Usage:
- *   docker compose --profile scaled --profile loadtest up -d --scale api-scaled=5
- *   
+ *   docker compose --profile loadtest up -d --scale api=5
+ *
  *   Or run manually:
- *   k6 run --vus 100 --duration 10m load-test.js
+ *   k6 run --vus 25 --duration 10m load-test.js
  */
 
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { Rate, Counter, Trend } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 import { randomItem, randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 
-//-----------------------------------------------------------------------------
-// Configuration
-//-----------------------------------------------------------------------------
-
 const BASE_URL = __ENV.API_URL || 'http://nginx:80';
+const BROWSER_TRAFFIC_SHARE = 0.05;
+const SHOPPER_TRAFFIC_SHARE = 0.20;
+const SHOPPER_ABANDON_RATE = 0.05;
+const BUYER_PRECHECKOUT_POLL_RATE = 0.08;
 
-// Test stages - ramp up, sustain, ramp down
 export const options = {
     stages: [
-        { duration: '1m', target: 50 },     // Ramp up to 50 users
-        { duration: '2m', target: 200 },    // Ramp up to 200 users
-        { duration: '3m', target: 300 },    // Sustain 300 users
-        { duration: '5m', target: 200 },    // Scale down to 200 users
-        { duration: '3m', target: 50 },     // Ramp down to 50 users
-        { duration: '1m', target: 150 },    // Ramp up to 150 users
-        { duration: '2m', target: 250 },    // Scale up to 250 users
-        { duration: '3m30s', target: 350 },    // Ramp up to 350 users
-        { duration: '30s', target: 500 },   // Peak at 500 users
-        { duration: '2m', target: 400 },    // Scale down to 400 users
-        { duration: '1m', target: 400 },    // Sustain 400 users
-        { duration: '2m', target: 300 },    // Scale down to 300 users
-        { duration: '2m', target: 250 },    // Scale down to 250 users
-        { duration: '1m', target: 150 },    // Scale down to 150 users
-        { duration: '3m', target: 50 },     // Ramp down to 50 users
-        { duration: '3m', target: 10 },     // Ramp down to 10 users
-        { duration: '3m', target: 100 },    // Ramp up to 100 users
-        { duration: '2m', target: 200 },    // Ramp up to 200 users
-        { duration: '5m', target: 250 },    // Ramp up to 250 users
-        { duration: '3m', target: 100 },    // Ramp down to 100 users
-        { duration: '2m', target: 0 },      // Ramp down to 0 users
+        { duration: '1m', target: 25 },
+        { duration: '4m', target: 60 },
+        { duration: '3m', target: 100 },
+        { duration: '2m', target: 40 },
+        { duration: '1m', target: 0 },
     ],
     thresholds: {
-        http_req_duration: ['p(95)<500'],  // 95% of requests under 500ms
-        http_req_failed: ['rate<0.01'],    // Less than 1% failure rate
+        http_req_duration: ['p(95)<1500', 'p(99)<3000'],
+        http_req_failed: ['rate<0.02'],
+        checkout_duration: ['p(95)<4000'],
+        unexpected_errors: ['rate<0.02'],
     },
 };
 
-//-----------------------------------------------------------------------------
-// Custom Metrics
-//-----------------------------------------------------------------------------
-
-const orderPlacedCounter = new Counter('orders_placed');
+const ordersPlaced = new Counter('orders_placed');
+const checkoutAttempts = new Counter('checkout_attempts');
+const checkoutDeclined = new Counter('checkout_declined');
+const checkoutTimedOut = new Counter('checkout_timed_out');
+const checkoutValidationFailed = new Counter('checkout_validation_failed');
+const checkoutStockValidationFailed = new Counter('checkout_stock_validation_failed');
 const basketOperations = new Counter('basket_operations');
+const cartAbandonments = new Counter('cart_abandonments');
+const orderStatusPolls = new Counter('order_status_polls');
 const itemsViewed = new Counter('items_viewed');
-const orderPlacementDuration = new Trend('order_placement_duration');
-const errorRate = new Rate('errors');
+const inventoryConflicts = new Counter('inventory_conflicts');
+const catalogRefreshes = new Counter('catalog_refreshes');
+const checkoutDuration = new Trend('checkout_duration');
+const orderStatusPollDuration = new Trend('order_status_poll_duration');
+const unexpectedErrors = new Rate('unexpected_errors');
 
-//-----------------------------------------------------------------------------
-// Test Data
-//-----------------------------------------------------------------------------
-
-// Known item IDs from seed data (will be populated dynamically)
-let itemIds = [];
-let deliveryOptionIds = [];
-let paymentOptionIds = [];
-
-// User simulation
-function generateUserId() {
-    return `loadtest-user-${randomIntBetween(1, 10000)}-${Date.now()}`;
-}
-
-//-----------------------------------------------------------------------------
-// API Helper Functions
-//-----------------------------------------------------------------------------
-
-const headers = {
+const defaultHeaders = {
+    Accept: 'application/json',
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
 };
 
-function getHeaders(userId) {
-    return {
-        ...headers,
-        'X-User-Id': userId,
-    };
-}
+const okResponse = http.expectedStatuses(200);
+const itemDetailResponse = http.expectedStatuses(200, 404);
+const basketMutationResponse = http.expectedStatuses(200, 201, 409);
+const basketClearResponse = http.expectedStatuses(204);
+const checkoutResponse = http.expectedStatuses(201, 202, 400, 409);
+const healthProbeResponse = http.expectedStatuses({ min: 200, max: 599 });
 
-function fetchItems() {
-    const res = http.get(`${BASE_URL}/api/items`, { headers });
-    if (res.status === 200) {
-        try {
-            const items = JSON.parse(res.body);
-            return items.map(i => i.id);
-        } catch (e) {
-            return [];
-        }
-    }
-    return [];
-}
-
-function fetchDeliveryOptions() {
-    const res = http.get(`${BASE_URL}/api/deliveryoptions`, { headers });
-    if (res.status === 200) {
-        try {
-            const options = JSON.parse(res.body);
-            return options.map(o => o.id);
-        } catch (e) {
-            return [];
-        }
-    }
-    return [];
-}
-
-function fetchPaymentOptions() {
-    const res = http.get(`${BASE_URL}/api/paymentoptions`, { headers });
-    if (res.status === 200) {
-        try {
-            const options = JSON.parse(res.body);
-            return options.map(o => o.id);
-        } catch (e) {
-            return [];
-        }
-    }
-    return [];
-}
-
-//-----------------------------------------------------------------------------
-// Setup - Fetch reference data
-//-----------------------------------------------------------------------------
+let activeCatalog = null;
 
 export function setup() {
-    console.log('Fetching reference data...');
-    
-    // Wait for API to be ready
-    let retries = 10;
-    while (retries > 0) {
-        const healthRes = http.get(`${BASE_URL}/health`);
-        if (healthRes.status === 200) {
-            break;
-        }
-        console.log(`Waiting for API... (${retries} retries left)`);
-        sleep(2);
-        retries--;
+    console.log('Fetching live reference data for customer journeys...');
+    waitForApi();
+
+    const categories = fetchJsonArray('/api/items/categories', 'categories');
+    const items = fetchJsonArray('/api/items', 'items');
+    const deliveryOptions = fetchJsonArray('/api/deliveryoptions', 'delivery options');
+    const paymentOptions = fetchJsonArray('/api/paymentoptions', 'payment options');
+
+    if (categories.length === 0 || items.length === 0 || deliveryOptions.length === 0 || paymentOptions.length === 0) {
+        throw new Error('Reference data is incomplete. Ensure the API is seeded and reachable before running k6.');
     }
-    
-    const items = fetchItems();
-    const delivery = fetchDeliveryOptions();
-    const payment = fetchPaymentOptions();
-    
-    console.log(`Loaded ${items.length} items, ${delivery.length} delivery options, ${payment.length} payment options`);
-    
+
+    console.log(
+        `Loaded ${categories.length} categories, ${items.length} items, ${deliveryOptions.length} delivery options, ${paymentOptions.length} payment options.`
+    );
+
     return {
-        itemIds: items,
-        deliveryOptionIds: delivery,
-        paymentOptionIds: payment,
+        categories,
+        items,
+        deliveryOptions,
+        paymentOptions,
     };
 }
 
-//-----------------------------------------------------------------------------
-// Scenarios
-//-----------------------------------------------------------------------------
+export default function (data) {
+    const persona = getPersona(data);
 
-// Scenario 1: Browse items (most common)
-function browseItems(data) {
-    itemsViewed.add(1);
-    
-    // Get all items
-    let res = http.get(`${BASE_URL}/api/items`, { headers });
-    check(res, { 'items list OK': (r) => r.status === 200 });
-    
-    // Get categories
-    res = http.get(`${BASE_URL}/api/items/categories`, { headers });
-    check(res, { 'categories OK': (r) => r.status === 200 });
-    
-    // Get items by random category
-    const categories = ['Electronics', 'Furniture', 'Accessories'];
-    const category = randomItem(categories);
-    res = http.get(`${BASE_URL}/api/items/categories/${category}`, { headers });
-    check(res, { 'items by category OK': (r) => r.status === 200 });
-    
-    // View specific item
-    if (data.itemIds.length > 0) {
-        const itemId = randomItem(data.itemIds);
-        res = http.get(`${BASE_URL}/api/items/${itemId}`, { headers });
-        check(res, { 'item detail OK': (r) => r.status === 200 || r.status === 404 });
+    if (persona.role === 'browser') {
+        runBrowserJourney(data, persona);
+        return;
     }
-    
-    sleep(randomIntBetween(1, 3));
+
+    if (persona.role === 'shopper') {
+        runShopperJourney(data, persona);
+        return;
+    }
+
+    runBuyerJourney(data, persona);
 }
 
-// Scenario 2: Add items to basket
-function addToBasket(data, userId) {
+export function teardown() {
+    console.log('Human-like load test completed.');
+}
+
+function runBrowserJourney(data, persona) {
+    browseCatalog(data, persona, randomIntBetween(2, 4));
+
+    if (Math.random() < 0.18) {
+        const basketReady = buildBasketForSession(data, persona, randomIntBetween(1, 2));
+        if (basketReady) {
+            viewBasket(persona.userId);
+
+            if (Math.random() < 0.6) {
+                checkoutBasket(data, persona);
+            } else {
+                cartAbandonments.add(1);
+            }
+        }
+    } else if (persona.lastOrderId && Math.random() < 0.1) {
+        checkRecentOrders(persona);
+    }
+
+    humanPause(1.5, 4.0);
+}
+
+function runShopperJourney(data, persona) {
+    browseCatalog(data, persona, randomIntBetween(1, 3));
+
+    const basketReady = buildBasketForSession(data, persona, randomIntBetween(1, 3));
+    if (!basketReady) {
+        humanPause(1.0, 2.5);
+        return;
+    }
+
+    viewBasket(persona.userId);
+
+    if (Math.random() < SHOPPER_ABANDON_RATE) {
+        cartAbandonments.add(1);
+
+        if (Math.random() < 0.35) {
+            clearBasket(persona.userId);
+        }
+
+        humanPause(2.0, 4.5);
+        return;
+    }
+
+    checkoutBasket(data, persona);
+    humanPause(2.0, 5.0);
+}
+
+function runBuyerJourney(data, persona) {
+    if (persona.lastOrderId && Math.random() < BUYER_PRECHECKOUT_POLL_RATE) {
+        pollOrderStatus(persona, randomIntBetween(1, 2));
+    }
+
+    browseCatalog(data, persona, randomIntBetween(1, 2));
+
+    const basketReady = buildBasketForSession(data, persona, randomIntBetween(2, 4));
+    if (!basketReady) {
+        humanPause(1.0, 2.5);
+        return;
+    }
+
+    checkoutBasket(data, persona);
+    humanPause(2.0, 4.5);
+}
+
+function browseCatalog(data, persona, steps) {
+    const catalogRes = http.get(`${BASE_URL}/api/items`, { headers: defaultHeaders, responseCallback: okResponse });
+    recordUnexpected(catalogRes.status === 200);
+    check(catalogRes, { 'catalog list returned 200': (res) => res.status === 200 });
+
+    if (catalogRes.status === 200) {
+        syncCatalogFromBody(catalogRes.body);
+    }
+
+    if (Math.random() < 0.75) {
+        const categoriesRes = http.get(`${BASE_URL}/api/items/categories`, { headers: defaultHeaders, responseCallback: okResponse });
+        recordUnexpected(categoriesRes.status === 200);
+        check(categoriesRes, { 'category list returned 200': (res) => res.status === 200 });
+    }
+
+    for (let index = 0; index < steps; index += 1) {
+        const category = pickCategory(data, persona);
+        const categoryPath = encodeURIComponent(category);
+        let categoryRes;
+
+        if (Math.random() < 0.5) {
+            categoryRes = http.get(`${BASE_URL}/api/items?category=${categoryPath}`, { headers: defaultHeaders, responseCallback: okResponse });
+        } else {
+            categoryRes = http.get(`${BASE_URL}/api/items/categories/${categoryPath}`, {
+                headers: defaultHeaders,
+                responseCallback: okResponse,
+            });
+        }
+
+        recordUnexpected(categoryRes.status === 200);
+        check(categoryRes, { 'category browse returned 200': (res) => res.status === 200 });
+
+        const item = pickItem(data, persona, category);
+        if (item) {
+            const detailRes = http.get(`${BASE_URL}/api/items/${item.id}`, {
+                headers: defaultHeaders,
+                responseCallback: itemDetailResponse,
+            });
+
+            itemsViewed.add(1);
+            recordUnexpected(detailRes.status === 200 || detailRes.status === 404);
+            check(detailRes, { 'item detail returned 200 or 404': (res) => res.status === 200 || res.status === 404 });
+        }
+
+        humanPause(0.8, 2.3);
+    }
+}
+
+function buildBasketForSession(data, persona, targetItems) {
+    let basket = getBasket(persona.userId);
+
+    if (basket.totalItems > 5 || Math.random() < 0.12) {
+        clearBasket(persona.userId);
+        basket = emptyBasket(persona.userId);
+    }
+
+    let selectedItems = pickDistinctItems(data, persona, targetItems);
+    if (selectedItems.length === 0) {
+        refreshCatalogSnapshot();
+        selectedItems = pickDistinctItems(data, persona, targetItems);
+    }
+
+    let successfulAdds = 0;
+
+    for (let index = 0; index < selectedItems.length; index += 1) {
+        const item = selectedItems[index];
+        const quantity = chooseBasketQuantity(item);
+        if (addToBasket(persona.userId, item.id, quantity)) {
+            successfulAdds += 1;
+        }
+
+        if (Math.random() < 0.35) {
+            humanPause(0.5, 1.5);
+        }
+    }
+
+    basket = getBasket(persona.userId);
+    if (basket.items.length > 0 && Math.random() < 0.22) {
+        tweakBasket(persona.userId, basket);
+        basket = getBasket(persona.userId);
+    }
+
+    return successfulAdds > 0 && basket.totalItems > 0;
+}
+
+function tweakBasket(userId, basket) {
+    const basketItem = randomItem(basket.items);
+    if (!basketItem) {
+        return;
+    }
+
+    if (Math.random() < 0.35) {
+        const deleteRes = http.del(`${BASE_URL}/api/basket/items/${basketItem.itemId}`, null, {
+            headers: getHeaders(userId),
+            responseCallback: okResponse,
+        });
+
+        basketOperations.add(1);
+        recordUnexpected(deleteRes.status === 200);
+        check(deleteRes, { 'basket remove returned 200': (res) => res.status === 200 });
+        return;
+    }
+
+    const nextQuantity = Math.max(1, randomIntBetween(1, Math.max(2, basketItem.quantity + 1)));
+    const updateRes = http.put(
+        `${BASE_URL}/api/basket/items/${basketItem.itemId}`,
+        JSON.stringify({ quantity: nextQuantity }),
+        {
+            headers: getHeaders(userId),
+            responseCallback: basketMutationResponse,
+        }
+    );
+
     basketOperations.add(1);
-    
-    if (data.itemIds.length === 0) return;
-    
-    const itemId = randomItem(data.itemIds);
-    const quantity = randomIntBetween(1, 5);
-    
-    const payload = JSON.stringify({
-        itemId: itemId,
-        quantity: quantity,
-    });
-    
-    const res = http.post(`${BASE_URL}/api/basket/items`, payload, {
-        headers: getHeaders(userId),
-    });
-    
-    const success = check(res, { 
-        'add to basket OK': (r) => r.status === 200 || r.status === 201 
-    });
-    
-    if (!success) {
-        errorRate.add(1);
+    if (updateRes.status === 409) {
+        inventoryConflicts.add(1);
     }
-    
-    sleep(randomIntBetween(0.5, 2));
+
+    recordUnexpected(updateRes.status === 200 || updateRes.status === 409);
+    check(updateRes, { 'basket update returned 200 or 409': (res) => res.status === 200 || res.status === 409 });
 }
 
-// Scenario 3: View basket
+function addToBasket(userId, itemId, quantity) {
+    const res = http.post(
+        `${BASE_URL}/api/basket/items`,
+        JSON.stringify({ itemId, quantity }),
+        {
+            headers: getHeaders(userId),
+            responseCallback: basketMutationResponse,
+        }
+    );
+
+    basketOperations.add(1);
+
+    if (res.status === 409) {
+        inventoryConflicts.add(1);
+    }
+
+    const accepted = res.status === 200 || res.status === 201 || res.status === 409;
+    recordUnexpected(accepted);
+    check(res, { 'basket add returned 200, 201 or 409': (response) => accepted });
+
+    return res.status === 200 || res.status === 201;
+}
+
 function viewBasket(userId) {
     const res = http.get(`${BASE_URL}/api/basket`, {
         headers: getHeaders(userId),
+        responseCallback: okResponse,
     });
-    
-    check(res, { 'view basket OK': (r) => r.status === 200 });
-    sleep(randomIntBetween(0.5, 1));
+
+    recordUnexpected(res.status === 200);
+    check(res, { 'basket view returned 200': (response) => response.status === 200 });
+    return parseJson(res.body, emptyBasket(userId));
 }
 
-// Scenario 4: Complete checkout flow (most complex, most logs)
-function completeCheckout(data, userId) {
-    const startTime = Date.now();
-    
-    // Add 1-3 items to basket
-    const numItems = randomIntBetween(1, 3);
-    for (let i = 0; i < numItems; i++) {
-        if (data.itemIds.length > 0) {
-            const itemId = randomItem(data.itemIds);
-            const payload = JSON.stringify({
-                itemId: itemId,
-                quantity: randomIntBetween(1, 3),
-            });
-            
-            http.post(`${BASE_URL}/api/basket/items`, payload, {
-                headers: getHeaders(userId),
-            });
-        }
-    }
-    
-    // View basket
-    http.get(`${BASE_URL}/api/basket`, { headers: getHeaders(userId) });
-    
-    // Check delivery options
-    http.get(`${BASE_URL}/api/deliveryoptions`, { headers });
-    
-    // Check payment options
-    http.get(`${BASE_URL}/api/paymentoptions`, { headers });
-    
-    // Place order
-    if (data.deliveryOptionIds.length > 0 && data.paymentOptionIds.length > 0) {
-        const orderPayload = JSON.stringify({
-            deliveryOptionId: randomItem(data.deliveryOptionIds),
-            paymentOptionId: randomItem(data.paymentOptionIds),
-            shippingAddress: {
-                street: `${randomIntBetween(1, 9999)} Test Street`,
-                city: randomItem(['New York', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix']),
-                postalCode: `${randomIntBetween(10000, 99999)}`,
-                country: 'USA',
-            },
-        });
-        
-        const res = http.post(`${BASE_URL}/api/orders`, orderPayload, {
-            headers: getHeaders(userId),
-        });
-        
-        const success = check(res, { 
-            'order placed OK': (r) => r.status === 200 || r.status === 201 || r.status === 400 
-        });
-        
-        if (res.status === 200 || res.status === 201) {
-            orderPlacedCounter.add(1);
-        }
-        
-        if (!success) {
-            errorRate.add(1);
-        }
-    }
-    
-    // View orders
-    http.get(`${BASE_URL}/api/orders`, { headers: getHeaders(userId) });
-    
-    const duration = Date.now() - startTime;
-    orderPlacementDuration.add(duration);
-    
-    sleep(randomIntBetween(1, 3));
-}
-
-// Scenario 5: View orders (returning customer)
-function viewOrders(userId) {
-    const res = http.get(`${BASE_URL}/api/orders`, {
+function clearBasket(userId) {
+    const res = http.del(`${BASE_URL}/api/basket`, null, {
         headers: getHeaders(userId),
+        responseCallback: basketClearResponse,
     });
-    
-    check(res, { 'view orders OK': (r) => r.status === 200 });
-    sleep(randomIntBetween(0.5, 1));
+
+    basketOperations.add(1);
+    recordUnexpected(res.status === 204);
+    check(res, { 'basket clear returned 204': (response) => response.status === 204 });
 }
 
-//-----------------------------------------------------------------------------
-// Main Test Function
-//-----------------------------------------------------------------------------
+function checkoutBasket(data, persona) {
+    checkoutAttempts.add(1);
 
-export default function(data) {
-    const userId = generateUserId();
-    
-    // Weighted scenario selection to simulate realistic traffic
-    const scenario = Math.random();
-    
-    if (scenario < 0.40) {
-        // 40% - Just browsing
-        browseItems(data);
-    } else if (scenario < 0.65) {
-        // 25% - Browse and add to basket
-        browseItems(data);
-        addToBasket(data, userId);
-    } else if (scenario < 0.80) {
-        // 15% - View basket
-        addToBasket(data, userId);
-        viewBasket(userId);
-    } else if (scenario < 0.95) {
-        // 15% - Complete checkout
-        completeCheckout(data, userId);
-    } else {
-        // 5% - Returning customer viewing orders
-        viewOrders(userId);
+    const deliveryRes = http.get(`${BASE_URL}/api/deliveryoptions`, { headers: defaultHeaders, responseCallback: okResponse });
+    const paymentRes = http.get(`${BASE_URL}/api/paymentoptions`, { headers: defaultHeaders, responseCallback: okResponse });
+
+    recordUnexpected(deliveryRes.status === 200);
+    recordUnexpected(paymentRes.status === 200);
+    check(deliveryRes, { 'delivery options returned 200': (res) => res.status === 200 });
+    check(paymentRes, { 'payment options returned 200': (res) => res.status === 200 });
+
+    const deliveryOption = chooseDeliveryOption(data.deliveryOptions);
+    const paymentOption = choosePaymentOption(data.paymentOptions);
+    const paymentScenario = choosePaymentScenario();
+    const startedAt = Date.now();
+
+    const res = http.post(
+        `${BASE_URL}/api/orders`,
+        JSON.stringify({
+            deliveryOptionId: deliveryOption.id,
+            paymentOptionId: paymentOption.id,
+        }),
+        {
+            headers: getHeaders(persona.userId, { 'X-Payment-Scenario': paymentScenario }),
+            responseCallback: checkoutResponse,
+        }
+    );
+
+    checkoutDuration.add(Date.now() - startedAt, { payment_scenario: paymentScenario.toLowerCase() });
+
+    const payload = parseJson(res.body, {});
+
+    if (res.status === 201) {
+        ordersPlaced.add(1);
+        persona.lastOrderId = payload.id;
+        persona.lastOrderNumber = payload.orderNumber;
+        persona.lastPaymentOutcome = 'authorized';
+        recordUnexpected(true);
+        check(res, { 'checkout authorized with 201': (response) => response.status === 201 });
+        pollOrderStatus(persona, randomIntBetween(2, 4));
+        return;
+    }
+
+    if (res.status === 400) {
+        checkoutValidationFailed.add(1);
+        persona.lastPaymentOutcome = 'validation_failed';
+
+        const isStockFailure = isStockValidationFailure(payload.message);
+        if (isStockFailure) {
+            checkoutStockValidationFailed.add(1);
+            refreshCatalogSnapshot();
+
+            if (Math.random() < 0.5) {
+                clearBasket(persona.userId);
+            }
+        }
+
+        recordUnexpected(true);
+        check(res, { 'checkout validation returned 400': (response) => response.status === 400 });
+        return;
+    }
+
+    if (res.status === 409) {
+        checkoutDeclined.add(1);
+        persona.lastPaymentOutcome = 'declined';
+        recordUnexpected(true);
+        check(res, { 'checkout decline returned 409': (response) => response.status === 409 });
+
+        if (Math.random() < 0.35) {
+            clearBasket(persona.userId);
+        }
+
+        return;
+    }
+
+    if (res.status === 202) {
+        checkoutTimedOut.add(1);
+        persona.lastPaymentOutcome = 'timed_out';
+        recordUnexpected(true);
+        check(res, { 'checkout timeout returned 202': (response) => response.status === 202 });
+
+        if (Math.random() < 0.25) {
+            clearBasket(persona.userId);
+        }
+
+        return;
+    }
+
+    recordUnexpected(false);
+    check(res, { 'checkout returned an expected status': (response) => response.status === 201 || response.status === 202 || response.status === 409 });
+}
+
+function checkRecentOrders(persona) {
+    const listRes = http.get(`${BASE_URL}/api/orders`, {
+        headers: getHeaders(persona.userId),
+        responseCallback: okResponse,
+    });
+
+    recordUnexpected(listRes.status === 200);
+    check(listRes, { 'orders list returned 200': (res) => res.status === 200 });
+
+    if (persona.lastOrderId && Math.random() < 0.65) {
+        pollOrderStatus(persona, 1);
     }
 }
 
-//-----------------------------------------------------------------------------
-// Teardown
-//-----------------------------------------------------------------------------
+function pollOrderStatus(persona, polls) {
+    if (!persona.lastOrderId) {
+        return;
+    }
 
-export function teardown(data) {
-    console.log('Load test completed.');
-    console.log(`Total orders attempted: ${orderPlacedCounter}`);
+    for (let attempt = 0; attempt < polls; attempt += 1) {
+        humanPause(2.0, 6.0);
+
+        const startedAt = Date.now();
+        const res = http.get(`${BASE_URL}/api/orders/${persona.lastOrderId}`, {
+            headers: getHeaders(persona.userId),
+            responseCallback: okResponse,
+        });
+
+        orderStatusPolls.add(1);
+        orderStatusPollDuration.add(Date.now() - startedAt);
+
+        const expected = res.status === 200;
+        recordUnexpected(expected);
+        check(res, { 'order poll returned 200': (response) => response.status === 200 });
+
+        if (!expected) {
+            return;
+        }
+
+        const order = parseJson(res.body, null);
+        if (!order || !order.fulfillment || !order.fulfillment.status) {
+            return;
+        }
+
+        if (order.fulfillment.status === 'Shipped') {
+            return;
+        }
+    }
 }
+
+function getBasket(userId) {
+    const res = http.get(`${BASE_URL}/api/basket`, {
+        headers: getHeaders(userId),
+        responseCallback: okResponse,
+    });
+
+    recordUnexpected(res.status === 200);
+    if (res.status !== 200) {
+        return emptyBasket(userId);
+    }
+
+    return parseJson(res.body, emptyBasket(userId));
+}
+
+function waitForApi() {
+    for (let retries = 0; retries < 15; retries += 1) {
+        const healthRes = http.get(`${BASE_URL}/health`, { headers: defaultHeaders, responseCallback: healthProbeResponse });
+        if (healthRes.status === 200) {
+            return;
+        }
+
+        console.log(`Waiting for API readiness... attempt ${retries + 1}/15`);
+        sleep(2);
+    }
+
+    throw new Error(`API at ${BASE_URL} did not become ready in time.`);
+}
+
+function fetchJsonArray(path, label) {
+    const res = http.get(`${BASE_URL}${path}`, { headers: defaultHeaders, responseCallback: okResponse });
+
+    if (res.status !== 200) {
+        throw new Error(`Failed to load ${label}. GET ${path} returned ${res.status}.`);
+    }
+
+    const payload = parseJson(res.body, []);
+    if (!Array.isArray(payload)) {
+        throw new Error(`Expected ${label} to be a JSON array.`);
+    }
+
+    return payload;
+}
+
+function getPersona(data) {
+    const sessionNumber = __ITER + 1;
+    const sessionOrdinal = ((__VU - 1) * 1000000) + sessionNumber;
+    const seed = (sessionOrdinal * 37) % 100;
+    let role = 'browser';
+
+    if (seed >= BROWSER_TRAFFIC_SHARE * 100 && seed < (BROWSER_TRAFFIC_SHARE + SHOPPER_TRAFFIC_SHARE) * 100) {
+        role = 'shopper';
+    } else if (seed >= (BROWSER_TRAFFIC_SHARE + SHOPPER_TRAFFIC_SHARE) * 100) {
+        role = 'buyer';
+    }
+
+    return {
+        userId: `loadtest-vu-${String(__VU).padStart(3, '0')}-session-${String(sessionNumber).padStart(6, '0')}`,
+        role,
+        favoriteCategory: data.categories[(sessionOrdinal - 1) % data.categories.length],
+        lastOrderId: null,
+        lastOrderNumber: null,
+        lastPaymentOutcome: null,
+    };
+}
+
+function pickCategory(data, persona) {
+    if (persona.favoriteCategory && Math.random() < 0.65) {
+        return persona.favoriteCategory;
+    }
+
+    return randomItem(data.categories);
+}
+
+function pickItem(data, persona, category) {
+    const availableItems = getCatalogItems(data).filter((item) => item.availableQuantity === undefined || item.availableQuantity > 0);
+    const categoryItems = availableItems.filter((item) => item.category === category);
+    const favoriteItems = availableItems.filter((item) => item.category === persona.favoriteCategory);
+
+    if (categoryItems.length > 0 && Math.random() < 0.7) {
+        return randomItem(categoryItems);
+    }
+
+    if (favoriteItems.length > 0 && Math.random() < 0.6) {
+        return randomItem(favoriteItems);
+    }
+
+    return availableItems.length > 0 ? randomItem(availableItems) : randomItem(getCatalogItems(data));
+}
+
+function pickDistinctItems(data, persona, count) {
+    const catalogItems = getCatalogItems(data);
+    const selected = [];
+    const usedIds = {};
+
+    while (selected.length < count) {
+        const item = pickItem(data, persona, pickCategory(data, persona));
+        if (!item) {
+            break;
+        }
+
+        if (!usedIds[item.id]) {
+            usedIds[item.id] = true;
+            selected.push(item);
+            continue;
+        }
+
+        if (Object.keys(usedIds).length >= catalogItems.length) {
+            break;
+        }
+    }
+
+    return selected;
+}
+
+function chooseDeliveryOption(optionsList) {
+    const express = optionsList.filter((option) => /express/i.test(option.name));
+    const locker = optionsList.filter((option) => /locker/i.test(option.name));
+    const standard = optionsList.filter((option) => !/express|locker/i.test(option.name));
+    const roll = Math.random();
+
+    if (roll < 0.55 && standard.length > 0) {
+        return randomItem(standard);
+    }
+
+    if (roll < 0.80 && express.length > 0) {
+        return randomItem(express);
+    }
+
+    if (locker.length > 0) {
+        return randomItem(locker);
+    }
+
+    return randomItem(optionsList);
+}
+
+function choosePaymentOption(optionsList) {
+    const creditCard = optionsList.filter((option) => option.icon === 'credit-card');
+    const paypal = optionsList.filter((option) => option.icon === 'paypal');
+    const bankTransfer = optionsList.filter((option) => option.icon === 'bank');
+    const roll = Math.random();
+
+    if (roll < 0.65 && creditCard.length > 0) {
+        return randomItem(creditCard);
+    }
+
+    if (roll < 0.90 && paypal.length > 0) {
+        return randomItem(paypal);
+    }
+
+    if (bankTransfer.length > 0) {
+        return randomItem(bankTransfer);
+    }
+
+    return randomItem(optionsList);
+}
+
+function choosePaymentScenario() {
+    const roll = Math.random();
+
+    if (roll < 0.88) {
+        return 'Success';
+    }
+
+    if (roll < 0.94) {
+        return 'Decline';
+    }
+
+    if (roll < 0.97) {
+        return 'SlowSuccess';
+    }
+
+    return 'Timeout';
+}
+
+function chooseBasketQuantity(item) {
+    const availableQuantity = Number.isFinite(item.availableQuantity) ? item.availableQuantity : 3;
+    const upperBound = Math.max(1, Math.min(3, availableQuantity));
+    return randomIntBetween(1, upperBound);
+}
+
+function getCatalogItems(data) {
+    return activeCatalog && activeCatalog.length > 0 ? activeCatalog : data.items;
+}
+
+function refreshCatalogSnapshot() {
+    const res = http.get(`${BASE_URL}/api/items`, {
+        headers: defaultHeaders,
+        responseCallback: okResponse,
+    });
+
+    recordUnexpected(res.status === 200);
+    check(res, { 'catalog refresh returned 200': (response) => response.status === 200 });
+
+    if (res.status === 200) {
+        syncCatalogFromBody(res.body);
+    }
+}
+
+function syncCatalogFromBody(body) {
+    const payload = parseJson(body, null);
+    if (!Array.isArray(payload) || payload.length === 0) {
+        return;
+    }
+
+    activeCatalog = payload;
+    catalogRefreshes.add(1);
+}
+
+function isStockValidationFailure(message) {
+    if (typeof message !== 'string') {
+        return false;
+    }
+
+    return /out of stock|available in the warehouse|not stocked in warehouse/i.test(message);
+}
+
+function getHeaders(userId, extraHeaders) {
+    return {
+        ...defaultHeaders,
+        'X-User-Id': userId,
+        ...(extraHeaders || {}),
+    };
+}
+
+function emptyBasket(userId) {
+    return {
+        id: null,
+        userId,
+        items: [],
+        totalPrice: 0,
+        totalItems: 0,
+    };
+}
+
+function parseJson(body, fallbackValue) {
+    try {
+        return JSON.parse(body);
+    } catch (error) {
+        return fallbackValue;
+    }
+}
+
+function recordUnexpected(expected) {
+    unexpectedErrors.add(expected ? 0 : 1);
+}
+
+function humanPause(minSeconds, maxSeconds) {
+    const milliseconds = randomIntBetween(Math.round(minSeconds * 1000), Math.round(maxSeconds * 1000));
+    sleep(milliseconds / 1000);
+}
+

@@ -21,6 +21,13 @@ public sealed record FulfillmentAttemptItemDto(
     string ItemName,
     int Quantity);
 
+public sealed record FulfillmentAttemptQuery(
+    FulfillmentStatus? Status,
+    string? UserId,
+    string? OrderNumber,
+    string? Warehouse,
+    int Take);
+
 public sealed record FulfillmentActionRequest(string? Message);
 
 public sealed record ShipFulfillmentRequest(string? TrackingReference, string? Message);

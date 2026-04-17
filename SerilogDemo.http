@@ -316,30 +316,30 @@ X-Payment-Scenario: Success
     }
 }
 
-@retryDemoUserId = workshop-user-002
+@channelPreferenceUserId = demo-user-002
 
-### Async Fan-Out Retry Demo - add item to basket
+### Async Fan-Out Channel Preference Demo - add item to basket
 POST {{baseUrl}}/api/basket/items
 Content-Type: application/json
-X-User-Id: {{retryDemoUserId}}
+X-User-Id: {{channelPreferenceUserId}}
 
 {
     "itemId": "00000000-0000-0000-0000-000000000002",
     "quantity": 1
 }
 
-### Async Fan-Out Retry Demo - place order
-# Before running this request, restart notification-service with NOTIFICATION_SIMULATION_MODE=FailFirstAttempt.
+### Async Fan-Out Channel Preference Demo - place order
+# Seeded demo-user-002 has email enabled and SMS disabled in NotificationService.
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
-X-User-Id: {{retryDemoUserId}}
+X-User-Id: {{channelPreferenceUserId}}
 X-Payment-Scenario: Success
 
 {
     "deliveryOptionId": "00000000-0000-0000-0001-000000000001",
     "paymentOptionId": "00000000-0000-0000-0002-000000000001",
     "shippingAddress": {
-        "street": "200 Retry Street",
+        "street": "200 Preference Street",
         "city": "Chicago",
         "postalCode": "60601",
         "country": "USA"

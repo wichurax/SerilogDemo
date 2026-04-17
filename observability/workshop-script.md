@@ -1,6 +1,6 @@
 # Workshop Script
 
-This script is intentionally short. It is designed for a live demo that starts with a happy path and then switches to the deterministic notification retry path.
+This script is intentionally short. It is designed for a live demo that starts with a happy path and then switches to channel-specific notification behavior.
 
 ## Setup
 
@@ -16,18 +16,17 @@ This script is intentionally short. It is designed for a live demo that starts w
 4. Open the trace and point out the synchronous payment span, the producer span, then the notification and fulfillment consumer spans.
 5. In Loki, filter logs by the order number and show the API publish log, notification success log, and fulfillment success log.
 
-## Part 2: Deterministic Notification Retry
+## Part 2: Notification Channel Preferences
 
-1. Restart only the notification service with PowerShell: `$env:NOTIFICATION_SIMULATION_MODE='FailFirstAttempt'; docker compose up -d notification-service`.
-2. If you are using bash instead, run `NOTIFICATION_SIMULATION_MODE=FailFirstAttempt docker compose up -d notification-service`.
-3. Place another order with the `Async Fan-Out Retry Demo` request in [SerilogDemo.http](SerilogDemo.http).
-4. In Loki, show the warning log that says the notification failed intentionally on attempt 1 and the later success log for attempt 2.
-5. In Tempo, open the `notification.consume_order_paid` spans and show that the first attempt is marked as an error and the retried attempt succeeds.
-6. Contrast that with the fulfillment consumer, which still completes normally for the same order.
+1. Use the seeded `demo-user-002` profile from Notification Service, which has email enabled and SMS disabled.
+2. Place another order with the `Async Fan-Out Channel Preference Demo` request in [SerilogDemo.http](SerilogDemo.http).
+3. In Loki, show the fake email payload log and the SMS skip log for the same order.
+4. In Tempo, open the `notification.email.consume_order_paid` and `notification.sms.consume_order_paid` spans and show that they continue the same producer trace but produce different outcomes.
+5. Contrast that with the fulfillment consumer, which still completes normally for the same order.
 
 ## Talking Points
 
 - The main API stays the system entry point and only publishes one integration event.
 - RabbitMQ fan-out lets multiple downstream services react independently to the same `order.paid` message.
 - Trace headers on the RabbitMQ message keep the async follow-up work connected in Tempo.
-- The retry demo is deterministic, so the first notification attempt always fails and the second always succeeds.
+- Notification Service uses a local fake-user table to decide whether email and SMS should be logged for a given user.

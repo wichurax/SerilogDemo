@@ -1,6 +1,6 @@
 # OpenTelemetry E-Commerce Demo
 
-This repository is a local, Docker-first demo of a moderately distributed e-commerce system instrumented with OpenTelemetry. The goal is to keep the domain simple while still showing realistic trace, log, metric, retry, and service-boundary examples.
+This repository is a local, Docker-first demo of a moderately distributed e-commerce system instrumented with OpenTelemetry. The goal is to keep the domain simple while still showing realistic trace, log, metric, and service-boundary examples.
 
 Main branch is the starting point. Individual blog-post states live on separate branches.
 
@@ -48,10 +48,10 @@ flowchart TB
 3. The main API calls the Payment Gateway synchronously.
 4. On success, the main API stores an outbox record.
 5. The outbox publisher sends an `order.paid` event to RabbitMQ.
-6. Notification Service and Fulfillment Service each consume the same event from their own queue.
-7. Notification can intentionally fail on the first attempt and succeed on retry for a deterministic demo.
+6. Notification Service consumes the same event on separate email and SMS queues, while Fulfillment Service consumes it on its own queue.
+7. Notification Service resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
 
-This gives one synchronous trace segment and two asynchronous, broker-backed follow-up paths.
+This gives one synchronous trace segment and multiple asynchronous, broker-backed follow-up paths. Fulfillment progression stays manual by default, and the warehouse-worker k6 script can automate collect, pack, and ship during load runs.
 
 ## Runnable Components
 
@@ -103,18 +103,13 @@ Default local values are in [appsettings.json](appsettings.json).
 ### Start Everything
 
 ```bash
+# Non scalable, single-instance demo topology
 docker compose up -d
-```
 
-### Scale Only the Main API
-
-```bash
+# Scalable main API with 3 instances behind Nginx
 docker compose up -d --scale api=3
-```
 
-### Enable Load Test Profile
-
-```bash
+# Load test profile with 5 API instances plus ecommerce, warehouse, and restock k6 workers
 docker compose --profile loadtest up -d --scale api=5
 ```
 
@@ -131,6 +126,26 @@ docker compose --profile loadtest up -d --scale api=5
 
 The main API order endpoint accepts the `X-Payment-Scenario` header for deterministic payment demos.
 
+## Load Test Model
+
+This repo now uses three separate k6 scripts:
+
+- [k6/load-test.js](k6/load-test.js): ecommerce users hitting the main API through Nginx with browse, basket, checkout, and order-status polling behavior.
+- [k6/load-test-warehouse.js](k6/load-test-warehouse.js): warehouse workers hitting the Fulfillment API directly to collect, pack, ship, and inspect fulfillment backlog.
+- [k6/load-test-restock.js](k6/load-test-restock.js): a replenishment worker that watches warehouse availability and tops stock back up through the existing warehouse API when items fall below a configurable low-water mark.
+
+Run all three with the `loadtest` profile when you want end-to-end automated load with continuing order creation. Run only the ecommerce script when you want backlog to accumulate for manual fulfillment demos.
+
+The restock worker keeps the test aligned with the business process: shipped orders still deduct real stock, and incoming replenishment restores availability instead of relying on unrealistically large seed inventory or bypassing reservation rules.
+
+Useful restock environment variables for the `loadtest` profile:
+
+- `RESTOCK_LOW_WATER_MARK`: when available quantity at or below this threshold becomes a replenishment candidate.
+- `RESTOCK_TARGET_AVAILABLE_QUANTITY`: target available quantity to restore after replenishment.
+- `RESTOCK_MAX_ITEMS_PER_CYCLE`: maximum number of items replenished per worker loop.
+- `RESTOCK_POLL_SECONDS`: pause between replenishment cycles.
+- `RESTOCK_CATEGORY_FILTER`: optional comma-separated category list to constrain replenishment.
+
 ## Stopping Services
 
 ```bash
@@ -145,8 +160,20 @@ docker compose --profile loadtest down -v
 - The `order.paid` message carries W3C trace headers so the async consumers continue the producer trace.
 - The demo is designed for trace-to-log correlation across service boundaries.
 - The main API produces the most visible business spans around checkout.
-- The Notification Service demonstrates async retry behavior after the HTTP request has already completed.
-- The Fulfillment Service demonstrates a second independent consumer on the same event.
+- The Notification Service demonstrates independent fake email and fake SMS handlers after the HTTP request has already completed.
+- The Fulfillment Service demonstrates a second independent consumer on the same event and exposes manual workflow controls.
+- The warehouse-worker k6 script can drain fulfillment backlog during load runs without becoming part of the runtime architecture.
+- The restock-worker k6 script keeps downstream traffic steady by replenishing finite warehouse stock through the same business API operators would use.
+
+## Notification Service Schema
+
+Notification Service owns the `notification_service` schema in PostgreSQL.
+
+- `NotificationUsers`: fake recipient contact data and channel preferences, seeded with 10 demo users.
+- `EmailNotificationDeliveries`: one record per handled email notification event, including destination, status, failure reason, and processed timestamp.
+- `SmsNotificationDeliveries`: one record per handled SMS notification event, including destination, status, failure reason, and processed timestamp.
+
+If a `UserId` from `order.paid` does not exist in `NotificationUsers`, Notification Service synthesizes a fake email address and phone number for that event and treats both channels as enabled. The migration that introduces this schema replaces the earlier `NotificationAttempts` table.
 
 ## Project Structure
 

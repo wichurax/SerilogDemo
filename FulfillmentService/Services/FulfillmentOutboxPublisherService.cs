@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using FulfillmentService.Data;
+using FulfillmentService.Options;
 using FulfillmentService.Telemetry;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -14,15 +15,18 @@ public sealed class FulfillmentOutboxPublisherService : BackgroundService
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly RabbitMqOptions _options;
+    private readonly FulfillmentServiceOptions _fulfillmentOptions;
     private readonly ILogger<FulfillmentOutboxPublisherService> _logger;
 
     public FulfillmentOutboxPublisherService(
         IServiceScopeFactory serviceScopeFactory,
         IOptions<RabbitMqOptions> options,
+        IOptions<FulfillmentServiceOptions> fulfillmentOptions,
         ILogger<FulfillmentOutboxPublisherService> logger)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _options = options.Value;
+        _fulfillmentOptions = fulfillmentOptions.Value;
         _logger = logger;
     }
 
@@ -61,11 +65,18 @@ public sealed class FulfillmentOutboxPublisherService : BackgroundService
     {
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<FulfillmentDbContext>();
+        var batchSize = Math.Clamp(_fulfillmentOptions.OutboxBatchSize, 1, 200);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
         var messages = await dbContext.OutboxMessages
-            .Where(message => message.PublishedAtUtc == null)
-            .OrderBy(message => message.OccurredAtUtc)
-            .Take(20)
+            .FromSqlInterpolated($@"
+                SELECT *
+                FROM fulfillment_service.""OutboxMessages""
+                WHERE ""PublishedAtUtc"" IS NULL
+                ORDER BY ""OccurredAtUtc""
+                FOR UPDATE SKIP LOCKED
+                LIMIT {batchSize}")
             .ToListAsync(cancellationToken);
 
         foreach (var message in messages)
@@ -113,5 +124,6 @@ public sealed class FulfillmentOutboxPublisherService : BackgroundService
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 }

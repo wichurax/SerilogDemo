@@ -40,7 +40,8 @@ public sealed class OrderPaidConsumerService : RabbitMqConsumerBackgroundService
 
     protected override Task ConfigureConsumerChannelAsync(IChannel channel, CancellationToken cancellationToken)
     {
-        return channel.BasicQosAsync(0, 1, false, cancellationToken);
+        var prefetchCount = (ushort)Math.Clamp(_fulfillmentOptions.ConsumerPrefetchCount, 1, ushort.MaxValue);
+        return channel.BasicQosAsync(0, prefetchCount, false, cancellationToken);
     }
 
     protected override async Task HandleMessageAsync(object sender, BasicDeliverEventArgs eventArgs, IChannel channel)
@@ -63,11 +64,24 @@ public sealed class OrderPaidConsumerService : RabbitMqConsumerBackgroundService
             using var scope = _serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<FulfillmentDbContext>();
 
-            var payload = JsonSerializer.Deserialize<OrderPaidIntegrationEvent>(Encoding.UTF8.GetString(eventArgs.Body.ToArray()));
-            if (payload is null)
+            var payloadText = Encoding.UTF8.GetString(eventArgs.Body.ToArray());
+            OrderPaidIntegrationEvent? payload;
+            try
             {
-                activity?.SetStatus(ActivityStatusCode.Error, "Order paid payload was empty.");
-                _logger.LogWarning("Fulfillment consumer received an empty order-paid payload for message {MessageId}", messageId);
+                payload = JsonSerializer.Deserialize<OrderPaidIntegrationEvent>(payloadText);
+            }
+            catch (JsonException)
+            {
+                payload = null;
+            }
+
+            if (payload is null || payload.Delivery is null)
+            {
+                activity?.SetStatus(ActivityStatusCode.Error, "Order paid payload is invalid.");
+                _logger.LogWarning(
+                    "Fulfillment consumer skipped malformed order-paid payload for message {MessageId}. Payload: {Payload}",
+                    messageId,
+                    payloadText);
                 await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false);
                 return;
             }
@@ -76,16 +90,21 @@ public sealed class OrderPaidConsumerService : RabbitMqConsumerBackgroundService
             activity?.SetTag("order.number", payload.OrderNumber);
             activity?.SetTag("fulfillment.warehouse", _fulfillmentOptions.WarehouseName);
             activity?.SetTag("delivery.courier", payload.Delivery.CourierName);
+            activity?.SetTag("messaging.rabbitmq.prefetch_count", _fulfillmentOptions.ConsumerPrefetchCount);
 
-            var attempt = await dbContext.FulfillmentAttempts.SingleOrDefaultAsync(item => item.MessageId == messageId);
-            if (attempt is not null && attempt.Status == FulfillmentStatus.Reserved)
+            var existingAttempt = await dbContext.FulfillmentAttempts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(item => item.MessageId == messageId);
+
+            if (existingAttempt is not null)
             {
                 activity?.SetTag("fulfillment.outcome", "duplicate_ignored");
+                activity?.SetTag("fulfillment.status", existingAttempt.Status.ToString());
                 await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false);
                 return;
             }
 
-            attempt ??= new FulfillmentAttempt
+            var attempt = new FulfillmentAttempt
             {
                 Id = Guid.NewGuid(),
                 MessageId = messageId,
@@ -102,35 +121,47 @@ public sealed class OrderPaidConsumerService : RabbitMqConsumerBackgroundService
             attempt.LastProcessedAtUtc = DateTime.UtcNow;
             activity?.SetTag("fulfillment.attempt_count", attempt.AttemptCount);
 
-            if (_fulfillmentOptions.ProcessingDelayMilliseconds > 0)
-            {
-                await Task.Delay(_fulfillmentOptions.ProcessingDelayMilliseconds);
-            }
-
             attempt.Status = FulfillmentStatus.Reserved;
             attempt.LastError = null;
 
-            if (attempt.Items.Count == 0)
-            {
-                attempt.Items = payload.Items
-                    .Select(item => new FulfillmentAttemptItem
-                    {
-                        Id = Guid.NewGuid(),
-                        ItemId = item.ItemId,
-                        ItemName = item.ItemName,
-                        Quantity = item.Quantity
-                    })
-                    .ToList();
-            }
+            attempt.Items = payload.Items
+                .Select(item => new FulfillmentAttemptItem
+                {
+                    Id = Guid.NewGuid(),
+                    ItemId = item.ItemId,
+                    ItemName = item.ItemName,
+                    Quantity = item.Quantity
+                })
+                .ToList();
 
-            if (dbContext.Entry(attempt).State == EntityState.Detached)
-            {
-                dbContext.FulfillmentAttempts.Add(attempt);
-            }
+            dbContext.FulfillmentAttempts.Add(attempt);
 
             dbContext.OutboxMessages.Add(FulfillmentProgressOutboxFactory.Create(attempt, "Inventory reserved for fulfillment.", activity));
 
-            await dbContext.SaveChangesAsync();
+            try
+            {
+                await dbContext.SaveChangesAsync();
+            }
+            catch (DbUpdateException exception)
+            {
+                var duplicateAttempt = await dbContext.FulfillmentAttempts
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(item => item.MessageId == messageId);
+
+                if (duplicateAttempt is not null)
+                {
+                    activity?.SetTag("fulfillment.outcome", "duplicate_ignored");
+                    activity?.SetTag("fulfillment.status", duplicateAttempt.Status.ToString());
+                    _logger.LogInformation(
+                        "Fulfillment message {MessageId} for order {OrderNumber} was already persisted by another consumer instance.",
+                        messageId,
+                        payload.OrderNumber);
+                    await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false);
+                    return;
+                }
+
+                throw new InvalidOperationException($"Failed to persist fulfillment attempt for message {messageId}.", exception);
+            }
 
             activity?.SetTag("fulfillment.outcome", "reserved");
 

@@ -16,10 +16,28 @@ Use these queries during the order-paid fan-out demo. Replace the sample order n
 { resource.service.name = "payment-gateway" && name = "payment.authorize" }
 ```
 
-### Notification consumer spans, including retry attempts
+### Email notification consumer spans
 
 ```text
-{ resource.service.name = "notification-service" && name = "notification.consume_order_paid" }
+{ resource.service.name = "notification-service" && name = "notification.email.consume_order_paid" }
+```
+
+### SMS notification consumer spans
+
+```text
+{ resource.service.name = "notification-service" && name = "notification.sms.consume_order_paid" }
+```
+
+### Fake email provider spans
+
+```text
+{ resource.service.name = "notification-service" && name = "notification.email.fake_send" }
+```
+
+### Fake SMS provider spans
+
+```text
+{ resource.service.name = "notification-service" && name = "notification.sms.fake_send" }
 ```
 
 ### Fulfillment consumer spans
@@ -42,10 +60,10 @@ Use these queries during the order-paid fan-out demo. Replace the sample order n
 {service_name="serilogdemo-api"} | json | OrderNumber="ORD-REPLACE-ME"
 ```
 
-### Notification retry log lines
+### Notification channel logs
 
 ```text
-{service_name="notification-service"} |~ "failed intentionally|Notification sent"
+{service_name="notification-service"} |~ "Fake email notification prepared|Fake SMS notification prepared|Skipped fake"
 ```
 
 ### Notification logs for one message id or order number
@@ -69,5 +87,5 @@ Use these queries during the order-paid fan-out demo. Replace the sample order n
 ## Grafana Drilldown Ideas
 
 - Start in Tempo with `checkout.place_order`, open a trace, and confirm it contains the API checkout work, the Payment Gateway span, the producer span, and the async consumer spans.
-- Pivot from a notification retry span to logs and confirm the warning log is followed by a later success log for the same message.
+- Pivot from the email and SMS consumer spans to logs and compare the sent and skipped outcomes for the same order.
 - Compare notification and fulfillment spans for the same order number to show RabbitMQ fan-out instead of single-consumer handoff.

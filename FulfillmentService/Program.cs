@@ -44,9 +44,24 @@ using (var scope = app.Services.CreateScope())
 
 app.MapHealthChecks("/health");
 
-app.MapGet("/api/fulfillment/orders", async (FulfillmentWorkflowService workflowService, CancellationToken cancellationToken) =>
+app.MapGet("/api/fulfillment/orders", async (
+    string? status,
+    string? userId,
+    string? orderNumber,
+    string? warehouse,
+    int? take,
+    FulfillmentWorkflowService workflowService,
+    CancellationToken cancellationToken) =>
 {
-    var attempts = await workflowService.GetAttemptsAsync(cancellationToken);
+    if (!TryParseFulfillmentStatus(status, out var parsedStatus, out var validationError))
+    {
+        return Results.BadRequest(new { message = validationError });
+    }
+
+    var attempts = await workflowService.GetAttemptsAsync(
+        new FulfillmentAttemptQuery(parsedStatus, userId, orderNumber, warehouse, take ?? 50),
+        cancellationToken);
+
     return Results.Ok(attempts.Select(MapAttempt));
 });
 
@@ -75,6 +90,12 @@ app.MapPost("/api/fulfillment/orders/{orderId:guid}/pack", async (Guid orderId, 
 app.MapPost("/api/fulfillment/orders/{orderId:guid}/ship", async (Guid orderId, ShipFulfillmentRequest? request, FulfillmentWorkflowService workflowService, CancellationToken cancellationToken) =>
 {
     var result = await workflowService.AdvanceAsync(orderId, FulfillmentStatus.Shipped, request?.Message, request?.TrackingReference, cancellationToken);
+    return ToHttpResult(result);
+});
+
+app.MapPost("/api/fulfillment/orders/{orderId:guid}/fail", async (Guid orderId, FulfillmentActionRequest? request, FulfillmentWorkflowService workflowService, CancellationToken cancellationToken) =>
+{
+    var result = await workflowService.FailAsync(orderId, request?.Message, cancellationToken);
     return ToHttpResult(result);
 });
 
@@ -125,4 +146,25 @@ static IResult ToHttpResult(FulfillmentTransitionResult result)
     }
 
     return Results.Conflict(new { message = result.Message });
+}
+
+static bool TryParseFulfillmentStatus(string? status, out FulfillmentStatus? parsedStatus, out string? validationError)
+{
+    if (string.IsNullOrWhiteSpace(status))
+    {
+        parsedStatus = null;
+        validationError = null;
+        return true;
+    }
+
+    if (Enum.TryParse<FulfillmentStatus>(status, ignoreCase: true, out var parsed))
+    {
+        parsedStatus = parsed;
+        validationError = null;
+        return true;
+    }
+
+    parsedStatus = null;
+    validationError = $"Unknown fulfillment status '{status}'.";
+    return false;
 }
