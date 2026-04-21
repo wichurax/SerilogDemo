@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SerilogDemo.Hosting.Messaging;
+using SerilogDemo.Hosting.Observability;
 using SerilogDemo.Messaging;
 
 namespace FulfillmentService.Services;
@@ -86,6 +87,7 @@ public sealed class OrderPaidConsumerService : RabbitMqConsumerBackgroundService
                 return;
             }
 
+            using var orderScope = BusinessLogContext.PushOrder(payload.OrderId, payload.OrderNumber, payload.UserId);
             activity?.SetTag("order.id", payload.OrderId);
             activity?.SetTag("order.number", payload.OrderNumber);
             activity?.SetTag("fulfillment.warehouse", _fulfillmentOptions.WarehouseName);

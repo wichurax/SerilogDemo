@@ -23,7 +23,7 @@ import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 const API_URL = __ENV.API_URL || 'http://nginx:80';
 const LOW_WATER_MARK = parsePositiveInt(__ENV.RESTOCK_LOW_WATER_MARK, 6);
 const TARGET_AVAILABLE_QUANTITY = parsePositiveInt(__ENV.RESTOCK_TARGET_AVAILABLE_QUANTITY, 18);
-const MAX_ITEMS_PER_CYCLE = parsePositiveInt(__ENV.RESTOCK_MAX_ITEMS_PER_CYCLE, 3);
+const MAX_ITEMS_PER_CYCLE = parsePositiveInt(__ENV.RESTOCK_MAX_ITEMS_PER_CYCLE, 5);
 const POLL_SECONDS = parsePositiveInt(__ENV.RESTOCK_POLL_SECONDS, 8);
 const CATEGORY_FILTERS = parseCsv(__ENV.RESTOCK_CATEGORY_FILTER);
 

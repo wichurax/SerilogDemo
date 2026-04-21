@@ -35,6 +35,14 @@ Accept: application/json
 GET {{baseUrl}}/api/items/categories/Furniture
 Accept: application/json
 
+### Get items by category - Office
+GET {{baseUrl}}/api/items/categories/Office
+Accept: application/json
+
+### Search items by keyword
+GET {{baseUrl}}/api/items?search=monitor
+Accept: application/json
+
 ###############################################################################
 # SHOPPING BASKET
 # All basket operations require X-User-Id header
@@ -183,7 +191,7 @@ Accept: application/json
 ###############################################################################
 
 @lokiUrl = http://localhost:3100
-@grafanaUrl = http://localhost:3000
+@grafanaUrl = http://localhost:3001
 
 ### Get all logs from SerilogDemo app (last 1 hour)
 GET {{lokiUrl}}/loki/api/v1/query_range?query={service_name="serilogdemo-api"}&start={{$timestamp -3600000}}&end={{$timestamp}}&limit=100

@@ -90,11 +90,14 @@ export function setup() {
         `Loaded ${categories.length} categories, ${items.length} items, ${deliveryOptions.length} delivery options, ${paymentOptions.length} payment options.`
     );
 
+    const searchTerms = buildSearchTerms(categories, items);
+
     return {
         categories,
         items,
         deliveryOptions,
         paymentOptions,
+        searchTerms,
     };
 }
 
@@ -198,6 +201,23 @@ function browseCatalog(data, persona, steps) {
     }
 
     for (let index = 0; index < steps; index += 1) {
+        if (data.searchTerms.length > 0 && Math.random() < 0.35) {
+            const searchTerm = pickSearchTerm(data, persona);
+            const searchRes = http.get(`${BASE_URL}/api/items?search=${encodeURIComponent(searchTerm)}`, {
+                headers: defaultHeaders,
+                responseCallback: okResponse,
+            });
+
+            recordUnexpected(searchRes.status === 200);
+            check(searchRes, { 'catalog search returned 200': (res) => res.status === 200 });
+
+            if (searchRes.status === 200) {
+                syncCatalogFromBody(searchRes.body);
+            }
+
+            humanPause(0.6, 1.6);
+        }
+
         const category = pickCategory(data, persona);
         const categoryPath = encodeURIComponent(category);
         let categoryRes;
@@ -550,6 +570,7 @@ function getPersona(data) {
         userId: `loadtest-vu-${String(__VU).padStart(3, '0')}-session-${String(sessionNumber).padStart(6, '0')}`,
         role,
         favoriteCategory: data.categories[(sessionOrdinal - 1) % data.categories.length],
+        favoriteSearchTerm: data.searchTerms[(sessionOrdinal - 1) % data.searchTerms.length],
         lastOrderId: null,
         lastOrderNumber: null,
         lastPaymentOutcome: null,
@@ -562,6 +583,14 @@ function pickCategory(data, persona) {
     }
 
     return randomItem(data.categories);
+}
+
+function pickSearchTerm(data, persona) {
+    if (persona.favoriteSearchTerm && Math.random() < 0.6) {
+        return persona.favoriteSearchTerm;
+    }
+
+    return randomItem(data.searchTerms);
 }
 
 function pickItem(data, persona, category) {
@@ -578,6 +607,18 @@ function pickItem(data, persona, category) {
     }
 
     return availableItems.length > 0 ? randomItem(availableItems) : randomItem(getCatalogItems(data));
+}
+
+function buildSearchTerms(categories, items) {
+    const itemTokens = items.flatMap((item) =>
+        String(item.name || '')
+            .split(/[^A-Za-z0-9]+/)
+            .map((word) => word.trim())
+            .filter((word) => word.length >= 4)
+            .slice(0, 2)
+    );
+
+    return Array.from(new Set([...categories, ...itemTokens])).sort();
 }
 
 function pickDistinctItems(data, persona, count) {

@@ -8,6 +8,7 @@ using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SerilogDemo.Data;
 using SerilogDemo.Hosting.Messaging;
+using SerilogDemo.Hosting.Observability;
 using SerilogDemo.Messaging;
 using SerilogDemo.Models;
 using SerilogDemo.Services.Inventory;
@@ -82,6 +83,7 @@ public sealed class FulfillmentProgressConsumerService : RabbitMqConsumerBackgro
                 return;
             }
 
+            using var orderScope = BusinessLogContext.PushOrder(payload.OrderId, payload.OrderNumber);
             fulfillmentStatus = parsedFulfillmentStatus;
             hasFulfillmentStatus = true;
             activity?.SetTag("fulfillment.incoming_status", fulfillmentStatus.ToString());

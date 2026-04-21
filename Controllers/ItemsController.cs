@@ -28,17 +28,30 @@ public class ItemsController : ControllerBase
     /// Get all items in the catalog.
     /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItems([FromQuery] string? category = null, CancellationToken cancellationToken = default)
+    public async Task<ActionResult<IEnumerable<ItemDto>>> GetItems([FromQuery] string? category = null, [FromQuery] string? search = null, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Fetching items from catalog. Category filter: {Category}", category ?? "none");
+        _logger.LogInformation(
+            "Fetching items from catalog. Category filter: {Category}. Search filter: {Search}",
+            category ?? "none",
+            search ?? "none");
 
         var query = _context.Items.AsNoTracking().AsQueryable();
         var warehouseName = _inventoryService.WarehouseName;
         var normalizedCategory = category?.Trim();
+        var normalizedSearch = search?.Trim();
 
         if (!string.IsNullOrWhiteSpace(normalizedCategory))
         {
             query = query.Where(i => EF.Functions.ILike(i.Category, normalizedCategory));
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedSearch))
+        {
+            var searchPattern = $"%{normalizedSearch}%";
+            query = query.Where(i =>
+                EF.Functions.ILike(i.Name, searchPattern) ||
+                EF.Functions.ILike(i.Description, searchPattern) ||
+                EF.Functions.ILike(i.Category, searchPattern));
         }
 
         var items = await query
@@ -50,7 +63,7 @@ public class ItemsController : ControllerBase
         EcommerceMetrics.CatalogRequests.Add(1, new TagList
         {
             { "operation", "list" },
-            { "filtered", string.IsNullOrWhiteSpace(category) ? "false" : "true" }
+            { "filtered", string.IsNullOrWhiteSpace(normalizedCategory) && string.IsNullOrWhiteSpace(normalizedSearch) ? "false" : "true" }
         });
 
         _logger.LogInformation("Returning {Count} items from catalog", items.Count);

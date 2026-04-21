@@ -5,6 +5,9 @@ using RabbitMQ.Client.Events;
 
 namespace SerilogDemo.Hosting.Messaging;
 
+/// <summary>
+/// Base hosted service for RabbitMQ consumers that manages connection lifecycle and queue subscription.
+/// </summary>
 public abstract class RabbitMqConsumerBackgroundService : BackgroundService
 {
     private static readonly TimeSpan DefaultConnectionRetryDelay = TimeSpan.FromSeconds(2);
@@ -20,6 +23,9 @@ public abstract class RabbitMqConsumerBackgroundService : BackgroundService
     private IChannel? _channel;
     private string? _consumerTag;
 
+    /// <summary>
+    /// Initializes a new RabbitMQ consumer background service.
+    /// </summary>
     protected RabbitMqConsumerBackgroundService(
         string consumerName,
         string exchangeName,
@@ -36,6 +42,7 @@ public abstract class RabbitMqConsumerBackgroundService : BackgroundService
         _logger = logger;
     }
 
+    /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken cancellationToken)
     {
         try
@@ -49,17 +56,24 @@ public abstract class RabbitMqConsumerBackgroundService : BackgroundService
         }
     }
 
+    /// <inheritdoc />
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await CleanupResourcesAsync(cancellationToken);
         await base.StopAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Configures channel settings before consuming messages.
+    /// </summary>
     protected virtual Task ConfigureConsumerChannelAsync(IChannel channel, CancellationToken cancellationToken)
     {
         return channel.BasicQosAsync(0, 1, false, cancellationToken);
     }
 
+    /// <summary>
+    /// Handles an incoming RabbitMQ delivery.
+    /// </summary>
     protected abstract Task HandleMessageAsync(object sender, BasicDeliverEventArgs eventArgs, IChannel channel);
 
     private async Task InitializeConsumerWithRetryAsync(CancellationToken cancellationToken)

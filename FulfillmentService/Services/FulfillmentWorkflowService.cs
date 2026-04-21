@@ -3,6 +3,7 @@ using FulfillmentService.Data;
 using FulfillmentService.Models;
 using FulfillmentService.Telemetry;
 using Microsoft.EntityFrameworkCore;
+using SerilogDemo.Hosting.Observability;
 
 namespace FulfillmentService.Services;
 
@@ -58,6 +59,7 @@ public sealed class FulfillmentWorkflowService
         string? trackingReference,
         CancellationToken cancellationToken)
     {
+        using var orderScope = BusinessLogContext.PushOrder(orderId: orderId);
         using var activity = FulfillmentDiagnostics.ActivitySource.StartActivity("fulfillment.advance_status", ActivityKind.Internal);
         activity?.SetTag("order.id", orderId);
         activity?.SetTag("fulfillment.target_status", targetStatus.ToString());
@@ -70,6 +72,7 @@ public sealed class FulfillmentWorkflowService
             return FulfillmentTransitionResult.Missing($"Fulfillment attempt for order {orderId} was not found.");
         }
 
+        using var orderNumberScope = BusinessLogContext.PushOrder(orderNumber: attempt.OrderNumber, userId: attempt.UserId);
         activity?.SetTag("fulfillment.current_status", attempt.Status.ToString());
 
         if (attempt.Status == targetStatus)
@@ -118,6 +121,7 @@ public sealed class FulfillmentWorkflowService
 
     public async Task<FulfillmentTransitionResult> FailAsync(Guid orderId, string? message, CancellationToken cancellationToken)
     {
+        using var orderScope = BusinessLogContext.PushOrder(orderId: orderId);
         using var activity = FulfillmentDiagnostics.ActivitySource.StartActivity("fulfillment.mark_failed", ActivityKind.Internal);
         activity?.SetTag("order.id", orderId);
         activity?.SetTag("fulfillment.target_status", FulfillmentStatus.Failed.ToString());
@@ -130,6 +134,7 @@ public sealed class FulfillmentWorkflowService
             return FulfillmentTransitionResult.Missing($"Fulfillment attempt for order {orderId} was not found.");
         }
 
+        using var orderNumberScope = BusinessLogContext.PushOrder(orderNumber: attempt.OrderNumber, userId: attempt.UserId);
         activity?.SetTag("fulfillment.current_status", attempt.Status.ToString());
 
         if (attempt.Status == FulfillmentStatus.Failed)

@@ -5,7 +5,7 @@ This script is intentionally short. It is designed for a live demo that starts w
 ## Setup
 
 1. Start the stack with `docker compose up -d`.
-2. Open Grafana at `http://localhost:3000`.
+2. Open Grafana at `http://localhost:3001`.
 3. Keep [SerilogDemo.http](SerilogDemo.http) open for the API calls.
 
 ## Part 1: Happy Path

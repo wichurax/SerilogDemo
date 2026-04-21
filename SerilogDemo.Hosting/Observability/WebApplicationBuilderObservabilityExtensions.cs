@@ -6,8 +6,14 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace SerilogDemo.Hosting.Observability;
 
+/// <summary>
+/// Adds shared observability configuration for web applications in the solution.
+/// </summary>
 public static class WebApplicationBuilderObservabilityExtensions
 {
+    /// <summary>
+    /// Builds observability options from configuration and wires Serilog defaults for the host.
+    /// </summary>
     public static ObservabilityOptions AddConfiguredObservability(this WebApplicationBuilder builder, string defaultServiceName)
     {
         var serviceName = builder.Configuration["OpenTelemetry:ServiceName"]
@@ -80,6 +86,9 @@ public static class WebApplicationBuilderObservabilityExtensions
         return observability;
     }
 
+    /// <summary>
+    /// Registers the shared OpenTelemetry resource configuration.
+    /// </summary>
     public static OpenTelemetryBuilder AddConfiguredOpenTelemetry(this IServiceCollection services, ObservabilityOptions observability)
     {
         return services.AddOpenTelemetry()

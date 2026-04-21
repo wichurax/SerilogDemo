@@ -9,6 +9,7 @@ using NotificationService.Telemetry;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using SerilogDemo.Hosting.Messaging;
+using SerilogDemo.Hosting.Observability;
 using SerilogDemo.Messaging;
 
 namespace NotificationService.Services;
@@ -72,6 +73,7 @@ public sealed class OrderPaidSmsConsumerService : RabbitMqConsumerBackgroundServ
                 return;
             }
 
+            using var orderScope = BusinessLogContext.PushOrder(payload.OrderId, payload.OrderNumber, payload.UserId);
             activity?.SetTag("order.id", payload.OrderId);
             activity?.SetTag("order.number", payload.OrderNumber);
             activity?.SetTag("app.user_id", payload.UserId);
@@ -140,6 +142,7 @@ public sealed class OrderPaidSmsConsumerService : RabbitMqConsumerBackgroundServ
                 dispatchActivity?.SetTag("notification.provider", "fake");
                 dispatchActivity?.SetTag("notification.transport", "log_only");
                 dispatchActivity?.SetTag("notification.destination", smsPayload.RecipientPhoneNumber);
+                dispatchActivity?.SetTag("order.id", payload.OrderId);
                 dispatchActivity?.SetTag("order.number", payload.OrderNumber);
                 dispatchActivity?.SetTag("app.user_id", payload.UserId);
 

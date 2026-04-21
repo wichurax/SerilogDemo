@@ -116,7 +116,7 @@ docker compose --profile loadtest up -d --scale api=5
 ### Access Points
 
 - API and Swagger: `http://localhost:8080`
-- Grafana: `http://localhost:3000`
+- Grafana: `http://localhost:3001`
 - RabbitMQ Management: `http://localhost:15672`
 
 ## Request Samples

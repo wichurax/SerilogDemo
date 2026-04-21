@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PaymentGateway.Contracts;
 using SerilogDemo.Data;
+using SerilogDemo.Hosting.Observability;
 using SerilogDemo.DTOs;
 using SerilogDemo.Models;
 using SerilogDemo.Messaging;
@@ -119,8 +120,11 @@ public sealed class CheckoutService : ICheckoutService
                     .ToList()
             };
 
+            using var orderScope = BusinessLogContext.PushOrder(order.Id, order.OrderNumber, userId);
+
             using (var persistenceActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.persist_order", ActivityKind.Internal))
             {
+                persistenceActivity?.SetTag("order.id", order.Id);
                 persistenceActivity?.SetTag("order.number", order.OrderNumber);
                 _context.Orders.Add(order);
                 await _context.SaveChangesAsync(cancellationToken);
@@ -131,6 +135,7 @@ public sealed class CheckoutService : ICheckoutService
             AuthorizePaymentResponse paymentResponse;
             using (var paymentActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.authorize_payment", ActivityKind.Client))
             {
+                paymentActivity?.SetTag("order.id", order.Id);
                 paymentActivity?.SetTag("order.number", order.OrderNumber);
                 paymentActivity?.SetTag("payment.method", paymentOption.Icon);
 
