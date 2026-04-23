@@ -22,8 +22,8 @@ flowchart TB
   API --> DB[(PostgreSQL)]
   PGW --> DB
   API --> RMQ[(RabbitMQ)]
-  RMQ --> NOTIFY[Notification Service]
-  RMQ --> FULFILL[Fulfillment Service]
+  RMQ --> NOTIFY[Notifications API]
+  RMQ --> FULFILL[Fulfillment API]
   NOTIFY --> DB
   FULFILL --> DB
 
@@ -48,8 +48,8 @@ flowchart TB
 3. The main API calls the Payment Gateway synchronously.
 4. On success, the main API stores an outbox record.
 5. The outbox publisher sends an `order.paid` event to RabbitMQ.
-6. Notification Service consumes the same event on separate email and SMS queues, while Fulfillment Service consumes it on its own queue.
-7. Notification Service resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
+6. Notifications API consumes the same event on separate email and SMS queues, while Fulfillment API consumes it on its own queue.
+7. Notifications API resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
 
 This gives one synchronous trace segment and multiple asynchronous, broker-backed follow-up paths. Fulfillment progression stays manual by default, and the warehouse-worker k6 script can automate collect, pack, and ship during load runs.
 
@@ -57,8 +57,8 @@ This gives one synchronous trace segment and multiple asynchronous, broker-backe
 
 - Main API: this README and [SerilogDemo.http](SerilogDemo.http)
 - Payment Gateway: [PaymentGateway/README.md](PaymentGateway/README.md)
-- Notification Service: [NotificationService/README.md](NotificationService/README.md)
-- Fulfillment Service: [FulfillmentService/README.md](FulfillmentService/README.md)
+- Notifications API: [NotificationsApi/README.md](NotificationsApi/README.md)
+- Fulfillment API: [FulfillmentApi/README.md](FulfillmentApi/README.md)
 - Log Search Tools: [LogSearchTools/README.md](LogSearchTools/README.md)
 - Observability Demo Queries: [observability/demo-queries.md](observability/demo-queries.md)
 - Workshop Script: [observability/workshop-script.md](observability/workshop-script.md)
@@ -160,20 +160,20 @@ docker compose --profile loadtest down -v
 - The `order.paid` message carries W3C trace headers so the async consumers continue the producer trace.
 - The demo is designed for trace-to-log correlation across service boundaries.
 - The main API produces the most visible business spans around checkout.
-- The Notification Service demonstrates independent fake email and fake SMS handlers after the HTTP request has already completed.
-- The Fulfillment Service demonstrates a second independent consumer on the same event and exposes manual workflow controls.
+- The Notifications API demonstrates independent fake email and fake SMS handlers after the HTTP request has already completed.
+- The Fulfillment API demonstrates a second independent consumer on the same event and exposes manual workflow controls.
 - The warehouse-worker k6 script can drain fulfillment backlog during load runs without becoming part of the runtime architecture.
 - The restock-worker k6 script keeps downstream traffic steady by replenishing finite warehouse stock through the same business API operators would use.
 
-## Notification Service Schema
+## Notifications API Schema
 
-Notification Service owns the `notification_service` schema in PostgreSQL.
+Notifications API owns the `notification_service` schema in PostgreSQL.
 
 - `NotificationUsers`: fake recipient contact data and channel preferences, seeded with 10 demo users.
 - `EmailNotificationDeliveries`: one record per handled email notification event, including destination, status, failure reason, and processed timestamp.
 - `SmsNotificationDeliveries`: one record per handled SMS notification event, including destination, status, failure reason, and processed timestamp.
 
-If a `UserId` from `order.paid` does not exist in `NotificationUsers`, Notification Service synthesizes a fake email address and phone number for that event and treats both channels as enabled. The migration that introduces this schema replaces the earlier `NotificationAttempts` table.
+If a `UserId` from `order.paid` does not exist in `NotificationUsers`, Notifications API synthesizes a fake email address and phone number for that event and treats both channels as enabled. The migration that introduces this schema replaces the earlier `NotificationAttempts` table.
 
 ## Project Structure
 
@@ -186,8 +186,8 @@ SerilogDemo/
 ├── Migrations/                 # Main API EF Core migrations
 ├── PaymentGateway/             # Synchronous payment service
 ├── PaymentGateway.Contracts/   # Shared payment contracts
-├── NotificationService/        # Async notification consumer
-├── FulfillmentService/         # Async fulfillment consumer
+├── NotificationsApi/           # Notification API host and async consumer
+├── FulfillmentApi/             # Fulfillment API host and async consumer
 ├── SerilogDemo.Messaging/      # Shared integration-event contracts
 ├── LogSearchTools/             # Optional log-search benchmark tool
 ├── observability/              # Grafana, Tempo, Loki, Prometheus, Collector config

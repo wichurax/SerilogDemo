@@ -1,41 +1,119 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "build",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "build",
-                "${workspaceFolder}/SerilogDemo.sln",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary;ForceNoAlign"
-            ],
-            "problemMatcher": "$msCompile"
-        },
-        {
-            "label": "publish",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "publish",
-                "${workspaceFolder}/SerilogDemo.sln",
-                "/property:GenerateFullPaths=true",
-                "/consoleloggerparameters:NoSummary;ForceNoAlign"
-            ],
-            "problemMatcher": "$msCompile"
-        },
-        {
-            "label": "watch",
-            "command": "dotnet",
-            "type": "process",
-            "args": [
-                "watch",
-                "run",
-                "--project",
-                "${workspaceFolder}/SerilogDemo.sln"
-            ],
-            "problemMatcher": "$msCompile"
-        }
-    ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"build",
+				"${workspaceFolder}/SerilogDemo.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "publish",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"publish",
+				"${workspaceFolder}/SerilogDemo.sln",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary;ForceNoAlign"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "watch",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"watch",
+				"run",
+				"--project",
+				"${workspaceFolder}/SerilogDemo.sln"
+			],
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-preview",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run preview -- --host 127.0.0.1 --port 4173",
+			"isBackground": true
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-dev-proxy",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run dev -- --host 127.0.0.1 --port 4174",
+			"isBackground": true
+		},
+		{
+			"label": "ui-build-post-checkout-fix",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build-final",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build-warehouse-fix",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		},
+		{
+			"label": "ui-build-warehouse-fix-2",
+			"type": "shell",
+			"command": "Set-Location \"c:\\dev\\backend\\SerilogDemo\\UI\"; bun run build",
+			"group": "build"
+		}
+	]
 }

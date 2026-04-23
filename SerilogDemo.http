@@ -337,7 +337,7 @@ X-User-Id: {{channelPreferenceUserId}}
 }
 
 ### Async Fan-Out Channel Preference Demo - place order
-# Seeded demo-user-002 has email enabled and SMS disabled in NotificationService.
+# Seeded demo-user-002 has email enabled and SMS disabled in NotificationsApi.
 POST {{baseUrl}}/api/orders
 Content-Type: application/json
 X-User-Id: {{channelPreferenceUserId}}

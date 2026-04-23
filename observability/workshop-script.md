@@ -18,7 +18,7 @@ This script is intentionally short. It is designed for a live demo that starts w
 
 ## Part 2: Notification Channel Preferences
 
-1. Use the seeded `demo-user-002` profile from Notification Service, which has email enabled and SMS disabled.
+1. Use the seeded `demo-user-002` profile from Notifications API, which has email enabled and SMS disabled.
 2. Place another order with the `Async Fan-Out Channel Preference Demo` request in [SerilogDemo.http](SerilogDemo.http).
 3. In Loki, show the fake email payload log and the SMS skip log for the same order.
 4. In Tempo, open the `notification.email.consume_order_paid` and `notification.sms.consume_order_paid` spans and show that they continue the same producer trace but produce different outcomes.
@@ -29,4 +29,4 @@ This script is intentionally short. It is designed for a live demo that starts w
 - The main API stays the system entry point and only publishes one integration event.
 - RabbitMQ fan-out lets multiple downstream services react independently to the same `order.paid` message.
 - Trace headers on the RabbitMQ message keep the async follow-up work connected in Tempo.
-- Notification Service uses a local fake-user table to decide whether email and SMS should be logged for a given user.
+- Notifications API uses a local fake-user table to decide whether email and SMS should be logged for a given user.

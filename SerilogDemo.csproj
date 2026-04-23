@@ -35,8 +35,8 @@
     <!-- Exclude LogSearchTools subfolder which has its own project -->
     <Compile Remove="LogSearchTools\**" />
     <Compile Remove="Migrations\**" />
-    <Compile Remove="NotificationService\**" />
-    <Compile Remove="FulfillmentService\**" />
+    <Compile Remove="NotificationsApi\**" />
+    <Compile Remove="FulfillmentApi\**" />
     <Compile Remove="FulfillmentSimulator\**" />
     <Compile Remove="PaymentGateway\**" />
     <Compile Remove="PaymentGateway.Contracts\**" />
@@ -44,8 +44,8 @@
     <Compile Remove="SerilogDemo.Hosting\**" />
     <Compile Remove="SerilogDemo.Messaging\**" />
     <Content Remove="LogSearchTools\**" />
-    <Content Remove="NotificationService\**" />
-    <Content Remove="FulfillmentService\**" />
+    <Content Remove="NotificationsApi\**" />
+    <Content Remove="FulfillmentApi\**" />
     <Content Remove="FulfillmentSimulator\**" />
     <Content Remove="PaymentGateway\**" />
     <Content Remove="PaymentGateway.Contracts\**" />
@@ -53,8 +53,8 @@
     <Content Remove="SerilogDemo.Hosting\**" />
     <Content Remove="SerilogDemo.Messaging\**" />
     <EmbeddedResource Remove="LogSearchTools\**" />
-    <EmbeddedResource Remove="NotificationService\**" />
-    <EmbeddedResource Remove="FulfillmentService\**" />
+    <EmbeddedResource Remove="NotificationsApi\**" />
+    <EmbeddedResource Remove="FulfillmentApi\**" />
     <EmbeddedResource Remove="FulfillmentSimulator\**" />
     <EmbeddedResource Remove="PaymentGateway\**" />
     <EmbeddedResource Remove="PaymentGateway.Contracts\**" />
@@ -62,8 +62,8 @@
     <EmbeddedResource Remove="SerilogDemo.Hosting\**" />
     <EmbeddedResource Remove="SerilogDemo.Messaging\**" />
     <None Remove="LogSearchTools\**" />
-    <None Remove="NotificationService\**" />
-    <None Remove="FulfillmentService\**" />
+    <None Remove="NotificationsApi\**" />
+    <None Remove="FulfillmentApi\**" />
     <None Remove="FulfillmentSimulator\**" />
     <None Remove="PaymentGateway\**" />
     <None Remove="PaymentGateway.Contracts\**" />

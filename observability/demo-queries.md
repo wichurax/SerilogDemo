@@ -19,31 +19,31 @@ Use these queries during the order-paid fan-out demo. Replace the sample order n
 ### Email notification consumer spans
 
 ```text
-{ resource.service.name = "notification-service" && name = "notification.email.consume_order_paid" }
+{ resource.service.name = "notifications-api" && name = "notification.email.consume_order_paid" }
 ```
 
 ### SMS notification consumer spans
 
 ```text
-{ resource.service.name = "notification-service" && name = "notification.sms.consume_order_paid" }
+{ resource.service.name = "notifications-api" && name = "notification.sms.consume_order_paid" }
 ```
 
 ### Fake email provider spans
 
 ```text
-{ resource.service.name = "notification-service" && name = "notification.email.fake_send" }
+{ resource.service.name = "notifications-api" && name = "notification.email.fake_send" }
 ```
 
 ### Fake SMS provider spans
 
 ```text
-{ resource.service.name = "notification-service" && name = "notification.sms.fake_send" }
+{ resource.service.name = "notifications-api" && name = "notification.sms.fake_send" }
 ```
 
 ### Fulfillment consumer spans
 
 ```text
-{ resource.service.name = "fulfillment-service" && name = "fulfillment.consume_order_paid" }
+{ resource.service.name = "fulfillment-api" && name = "fulfillment.consume_order_paid" }
 ```
 
 ### Filter by a specific order number attribute
@@ -63,19 +63,19 @@ Use these queries during the order-paid fan-out demo. Replace the sample order n
 ### Notification channel logs
 
 ```text
-{service_name="notification-service"} |~ "Fake email notification prepared|Fake SMS notification prepared|Skipped fake"
+{service_name="notifications-api"} |~ "Fake email notification prepared|Fake SMS notification prepared|Skipped fake"
 ```
 
 ### Notification logs for one message id or order number
 
 ```text
-{service_name="notification-service"} | json | OrderNumber="ORD-REPLACE-ME"
+{service_name="notifications-api"} | json | OrderNumber="ORD-REPLACE-ME"
 ```
 
 ### Fulfillment logs for one order number
 
 ```text
-{service_name="fulfillment-service"} | json | OrderNumber="ORD-REPLACE-ME"
+{service_name="fulfillment-api"} | json | OrderNumber="ORD-REPLACE-ME"
 ```
 
 ### Outbox publisher logs in the main API

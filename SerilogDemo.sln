@@ -13,9 +13,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PaymentGateway", "PaymentGa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerilogDemo.Messaging", "SerilogDemo.Messaging\SerilogDemo.Messaging.csproj", "{5A92F79A-EE4F-4593-BF5E-894A8178647B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotificationService", "NotificationService\NotificationService.csproj", "{15345BE4-8384-4B72-A25D-597FCF3A1FF2}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NotificationsApi", "NotificationsApi\NotificationsApi.csproj", "{15345BE4-8384-4B72-A25D-597FCF3A1FF2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulfillmentService", "FulfillmentService\FulfillmentService.csproj", "{37CAC6B6-E307-4AD4-B459-DA5F1AC82E8A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FulfillmentApi", "FulfillmentApi\FulfillmentApi.csproj", "{37CAC6B6-E307-4AD4-B459-DA5F1AC82E8A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerilogDemo.Hosting", "SerilogDemo.Hosting\SerilogDemo.Hosting.csproj", "{2254D093-0BCF-43DA-858A-171FB0B83AD0}"
 EndProject

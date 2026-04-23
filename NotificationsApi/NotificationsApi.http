@@ -1,0 +1,51 @@
+@NotificationsApi_HostAddress = http://localhost:5177
+
+GET {{NotificationsApi_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/users
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/users/demo-user-002
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/users/workshop-user-unknown
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/email?take=20
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/email?userId=demo-user-002&status=Skipped&take=20
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/email?orderNumber=ORD-REPLACE-ME&take=20
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/sms?take=20
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/sms?userId=demo-user-002&status=Skipped&take=20
+Accept: application/json
+
+###
+
+GET {{NotificationsApi_HostAddress}}/api/notifications/deliveries/sms?orderNumber=ORD-REPLACE-ME&take=20
+Accept: application/json
+
+###

@@ -17,7 +17,7 @@ import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 import { randomIntBetween } from 'https://jslib.k6.io/k6-utils/1.2.0/index.js';
 
-const FULFILLMENT_URL = __ENV.FULFILLMENT_URL || 'http://fulfillment-service:8080';
+const FULFILLMENT_URL = __ENV.FULFILLMENT_URL || 'http://fulfillment-api:8080';
 const BACKLOG_BATCH_SIZE = parsePositiveInt(__ENV.FULFILLMENT_BATCH_SIZE, 5);
 const INSPECTOR_TAKE = parsePositiveInt(__ENV.FULFILLMENT_INSPECTOR_TAKE, 25);
 
@@ -244,11 +244,11 @@ function waitForService() {
             return;
         }
 
-        console.log(`Waiting for fulfillment service readiness... attempt ${retries + 1}/20`);
+        console.log(`Waiting for Fulfillment API readiness... attempt ${retries + 1}/20`);
         sleep(2);
     }
 
-    throw new Error(`Fulfillment service at ${FULFILLMENT_URL} did not become ready in time.`);
+    throw new Error(`Fulfillment API at ${FULFILLMENT_URL} did not become ready in time.`);
 }
 
 function parseJson(body, fallbackValue) {
