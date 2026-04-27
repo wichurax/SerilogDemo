@@ -105,12 +105,15 @@ Default local values are in [appsettings.json](appsettings.json).
 
 - Docker with `docker compose`
 - .NET 8 SDK for local development
-- Bun is only required for host-based UI development; the compose stack builds the UI container for you.
+- Bun is required for the default host-based UI development flow.
 
 ### Start Everything
 
 ```bash
-# Non scalable, single-instance demo topology
+# Start full app (frontend and backend).
+ENABLE_DOCKER_UI=1 docker compose --profile ui-build up -d
+
+# Start the backend stack. The UI is not built by compose in this mode.
 docker compose up -d
 
 # Scalable main API with 3 instances behind Nginx
@@ -120,9 +123,16 @@ docker compose up -d --scale api=3
 docker compose --profile loadtest up -d --scale api=5
 ```
 
+### UI Modes
+
+- Default development flow: start the backend stack with `docker compose up -d`, then run `bun run dev` from `UI/` and open `http://localhost:5173` for hot reload.
+- Optional containerized UI flow: run `ENABLE_DOCKER_UI=1 docker compose --profile ui-build up -d` and open `http://localhost:8080`.
+- If you start compose without the opt-in UI flag, `http://localhost:8080/` returns a short message telling you to use the host dev server instead.
+
 ### Access Points
 
-- UI: `http://localhost:8080`
+- UI (default dev flow): `http://localhost:5173`
+- UI (compose opt-in): `http://localhost:8080`
 - API: `http://localhost:8080/api`
 - Swagger UI: `http://localhost:8080/swagger`
 - Grafana: `http://localhost:3001`
@@ -199,7 +209,7 @@ SerilogDemo/
 ├── FulfillmentApi/             # Fulfillment API host and async consumer
 ├── SerilogDemo.Messaging/      # Shared integration-event contracts
 ├── LogSearchTools/             # Optional log-search benchmark tool
-├── UI/                         # React frontend built into docker compose
+├── UI/                         # React frontend for Bun/Vite dev or optional compose build
 ├── observability/              # Grafana, Tempo, Loki, Prometheus, Collector config
 ├── nginx/                      # Nginx load balancer config
 ├── k6/                         # Load test scripts

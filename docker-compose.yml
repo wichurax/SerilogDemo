@@ -2,12 +2,14 @@
 # SerilogDemo Docker Compose
 #
 # Usage:
-#   Default mode:  docker compose up -d
-#   Scale API:     docker compose up -d --scale api=3
-#   With k6 test:  docker compose --profile loadtest up -d --scale api=5
+#   Default mode:               docker compose up -d
+#   Scale API:                  docker compose up -d --scale api=3
+#   With dockerized UI:         ENABLE_DOCKER_UI=1 docker compose --profile ui-build up -d
+#   With k6 test:               docker compose --profile loadtest up -d --scale api=5
 #
 # Access:
-#   - UI:               http://localhost:8080
+#   - UI via Vite dev server: http://localhost:5173
+#   - UI via compose opt-in:  http://localhost:8080
 #   - API:              http://localhost:8080/api
 #   - Grafana:          http://localhost:3001 (admin/admin)
 #   - Loki:             http://localhost:3100
@@ -261,18 +263,32 @@ services:
       - serilog-network
     expose:
       - "80"
+    profiles:
+      - ui-build
 
   nginx:
     image: nginx:alpine
     container_name: nginx-lb
     ports:
       - "8080:80"
+    environment:
+      - ENABLE_DOCKER_UI=${ENABLE_DOCKER_UI:-0}
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/config/nginx.disabled.conf:ro
+      - ./nginx/nginx.ui.conf:/etc/nginx/config/nginx.ui.conf:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ "$${ENABLE_DOCKER_UI}" = "1" ]; then
+          cp /etc/nginx/config/nginx.ui.conf /etc/nginx/nginx.conf
+        else
+          cp /etc/nginx/config/nginx.disabled.conf /etc/nginx/nginx.conf
+        fi
+        exec nginx -g 'daemon off;'
     depends_on:
       - api
       - fulfillment-api
-      - ui
     networks:
       - serilog-network
 
