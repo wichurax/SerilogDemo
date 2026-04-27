@@ -225,6 +225,7 @@ public class OrdersController : ControllerBase
             order.TotalPrice,
             order.Status.ToString(),
             order.PaymentStatus.ToString(),
+            order.PaymentStatusUpdatedAtUtc,
             order.PaymentAttemptId,
             order.PaymentProviderCode,
             order.PaymentFailureReason,

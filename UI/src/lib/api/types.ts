@@ -1,4 +1,4 @@
-export type PaymentScenario = 'Default' | 'Success' | 'Decline' | 'SlowSuccess' | 'Timeout'
+export type PaymentScenario = 'Success' | 'Decline' | 'SlowSuccess' | 'Timeout'
 
 export type FulfillmentStatus =
   | 'Pending'
@@ -89,6 +89,7 @@ export interface Order {
   totalPrice: number
   status: string
   paymentStatus: string
+  paymentStatusUpdatedAtUtc?: string | null
   paymentAttemptId?: string | null
   paymentProviderCode?: string | null
   paymentFailureReason?: string | null

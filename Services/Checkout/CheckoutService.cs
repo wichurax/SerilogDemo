@@ -35,10 +35,11 @@ public sealed class CheckoutService : ICheckoutService
     public async Task<CheckoutResult> PlaceOrderAsync(string userId, PlaceOrderRequest request, PaymentScenario? paymentScenario, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
+        var resolvedPaymentScenario = paymentScenario ?? PaymentScenario.Success;
 
         using var activity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.place_order", ActivityKind.Internal);
         activity?.SetTag("app.user_id", userId);
-        activity?.SetTag("checkout.payment_scenario", paymentScenario?.ToString() ?? "default");
+        activity?.SetTag("checkout.payment_scenario", resolvedPaymentScenario.ToString());
 
         using var cartActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.load_cart", ActivityKind.Internal);
         var cart = await _context.Carts
@@ -146,7 +147,7 @@ public sealed class CheckoutService : ICheckoutService
                     PaymentMethodCode: paymentOption.Icon,
                     Amount: order.TotalPrice,
                     Currency: Currency,
-                    Scenario: paymentScenario);
+                    Scenario: resolvedPaymentScenario);
 
                 paymentResponse = await _paymentGatewayClient.AuthorizeAsync(paymentRequest, cancellationToken);
 
@@ -156,6 +157,8 @@ public sealed class CheckoutService : ICheckoutService
 
             order.PaymentAttemptId = paymentResponse.PaymentAttemptId;
             order.PaymentProviderCode = paymentResponse.ProviderCode;
+            var paymentStatusUpdatedAtUtc = DateTime.UtcNow;
+            order.PaymentStatusUpdatedAtUtc = paymentStatusUpdatedAtUtc;
             order.PaymentFailureReason = paymentResponse.Status == PaymentAuthorizationStatus.Authorized
                 ? null
                 : paymentResponse.Message;
@@ -187,7 +190,7 @@ public sealed class CheckoutService : ICheckoutService
                                 deliveryOption.EstimatedDaysMax),
                             Items: order.Items.Select(item => new OrderPaidLineItem(item.ItemId, item.ItemName, item.Quantity, item.UnitPrice)).ToArray(),
                             TotalPrice: order.TotalPrice,
-                            OccurredAtUtc: DateTimeOffset.UtcNow);
+                            OccurredAtUtc: new DateTimeOffset(paymentStatusUpdatedAtUtc, TimeSpan.Zero));
 
                         _context.OutboxMessages.Add(new OutboxMessage
                         {

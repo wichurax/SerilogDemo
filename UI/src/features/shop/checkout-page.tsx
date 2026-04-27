@@ -19,7 +19,7 @@ import type { CheckoutResult, PaymentScenario } from '@/lib/api/types'
 import { formatCurrency } from '@/lib/format'
 import { useDemoUserStore } from '@/stores/demo-user-store'
 
-const paymentScenarioValues = ['Default', 'Success', 'Decline', 'SlowSuccess', 'Timeout'] as const
+const paymentScenarioValues = ['Success', 'Decline', 'SlowSuccess', 'Timeout'] as const
 const guidPattern = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
 const checkoutSchema = z.object({
@@ -145,7 +145,7 @@ export function CheckoutPage() {
         <Card>
           <CardHeader>
             <CardTitle>Checkout form</CardTitle>
-            <CardDescription>Choose delivery and payment, then decide whether the fake gateway should authorize, decline, or time out.</CardDescription>
+            <CardDescription>Choose delivery and payment, then decide whether the fake gateway should authorize instantly, authorize slowly, decline, or time out.</CardDescription>
           </CardHeader>
           <CardContent>
             <form className='space-y-5' onSubmit={form.handleSubmit((values) => checkoutMutation.mutate(values))}>
@@ -225,9 +225,7 @@ export function CheckoutPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {paymentScenarioValues.map((scenario) => (
-                          <SelectItem key={scenario} value={scenario}>
-                            {scenario === 'Default' ? 'Default service behavior' : scenario}
-                          </SelectItem>
+                          <SelectItem key={scenario} value={scenario}>{scenario}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

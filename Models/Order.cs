@@ -31,6 +31,7 @@ public class Order
     public DateTime? FulfillmentPackedAtUtc { get; set; }
     public DateTime? FulfillmentDispatchedAtUtc { get; set; }
     public DateTime? FulfillmentLastUpdatedAtUtc { get; set; }
+    public DateTime? PaymentStatusUpdatedAtUtc { get; set; }
     public Guid? PaymentAttemptId { get; set; }
     public string? PaymentProviderCode { get; set; }
     public string? PaymentFailureReason { get; set; }

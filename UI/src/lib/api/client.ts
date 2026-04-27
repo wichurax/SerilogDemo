@@ -99,10 +99,7 @@ export async function placeOrder(
   },
 ): Promise<CheckoutResult> {
   const headers = new Headers()
-
-  if (input.paymentScenario !== 'Default') {
-    headers.set('X-Payment-Scenario', input.paymentScenario)
-  }
+  headers.set('X-Payment-Scenario', input.paymentScenario)
 
   const { status, data } = await requestWithStatus<Order | OrderPlacementFailure>(
     '/api/orders',

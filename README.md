@@ -143,7 +143,7 @@ docker compose --profile loadtest up -d --scale api=5
 - Main API requests: [SerilogDemo.http](SerilogDemo.http)
 - Payment Gateway requests: [PaymentGateway/PaymentGateway.http](PaymentGateway/PaymentGateway.http)
 
-The main API order endpoint accepts the `X-Payment-Scenario` header for deterministic payment demos.
+The main API order endpoint accepts the `X-Payment-Scenario` header for deterministic payment demos. Supported explicit values are `Success`, `Decline`, `SlowSuccess`, and `Timeout`; when the header is omitted, the backend defaults to `Success`.
 
 ## Load Test Model
 

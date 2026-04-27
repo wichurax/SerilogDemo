@@ -255,6 +255,9 @@ namespace SerilogDemo.Migrations
                     b.Property<int>("PaymentStatus")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PaymentStatusUpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 

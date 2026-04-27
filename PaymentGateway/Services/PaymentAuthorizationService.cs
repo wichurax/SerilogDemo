@@ -28,10 +28,12 @@ public sealed class PaymentAuthorizationService : IPaymentAuthorizationService
     /// <inheritdoc />
     public async Task<AuthorizePaymentResponse> AuthorizeAsync(AuthorizePaymentRequest request, CancellationToken cancellationToken)
     {
+        var scenario = request.Scenario ?? PaymentScenario.Success;
+
         using var activity = PaymentGatewayDiagnostics.ActivitySource.StartActivity("payment.authorize", System.Diagnostics.ActivityKind.Internal);
         activity?.SetTag("order.reference", request.OrderReference);
         activity?.SetTag("payment.method", request.PaymentMethodCode);
-        activity?.SetTag("payment.scenario", request.Scenario?.ToString() ?? "default");
+        activity?.SetTag("payment.scenario", scenario.ToString());
 
         var existingAttempt = await _dbContext.PaymentAttempts
             .SingleOrDefaultAsync(attempt => attempt.IdempotencyKey == request.IdempotencyKey, cancellationToken);
@@ -42,7 +44,6 @@ public sealed class PaymentAuthorizationService : IPaymentAuthorizationService
             return Map(existingAttempt, isIdempotentReplay: true);
         }
 
-        var scenario = request.Scenario ?? PaymentScenario.Success;
         if (scenario == PaymentScenario.SlowSuccess)
         {
             await Task.Delay(_options.SlowSuccessDelayMilliseconds, cancellationToken);

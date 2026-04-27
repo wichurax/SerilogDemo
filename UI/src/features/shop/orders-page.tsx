@@ -12,9 +12,9 @@ import { StatusBadge } from '@/components/shared/status-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { resolveVisibleOrderStatus } from '@/features/shop/order-status'
 import { getOrderByNumber, getOrders } from '@/lib/api/client'
 import { getErrorMessage } from '@/lib/api/http'
-import type { OrderSummary } from '@/lib/api/types'
 import { formatCurrency, formatDateTime, pluralize } from '@/lib/format'
 import { useDemoUserStore } from '@/stores/demo-user-store'
 
@@ -100,7 +100,7 @@ export function OrdersPage() {
                         <p className='text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground'>Order no.</p>
                         <p className='font-mono text-base font-semibold tracking-[0.04em] text-foreground md:text-lg'>{order.orderNumber}</p>
                       </div>
-                      <StatusBadge value={resolveVisibleOrderStatus(order)} />
+                      <StatusBadge value={resolveVisibleOrderStatus(order.status, order.fulfillmentStatus)} />
                       <p className='text-sm text-muted-foreground'>Placed {formatDateTime(order.createdAt)}</p>
                     </div>
                     <div className='flex items-center gap-3'>
@@ -118,16 +118,4 @@ export function OrdersPage() {
       </div>
     </div>
   )
-}
-
-function resolveVisibleOrderStatus(order: OrderSummary) {
-  if (order.status === 'Cancelled') {
-    return order.status
-  }
-
-  if (order.fulfillmentStatus === 'Reserved') {
-    return 'Confirmed'
-  }
-
-  return order.fulfillmentStatus !== 'Pending' ? order.fulfillmentStatus : order.status
 }

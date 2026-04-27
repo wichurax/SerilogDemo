@@ -69,6 +69,7 @@ public record OrderDto(
     decimal TotalPrice,
     string Status,
     string PaymentStatus,
+    DateTime? PaymentStatusUpdatedAtUtc,
     Guid? PaymentAttemptId,
     string? PaymentProviderCode,
     string? PaymentFailureReason,

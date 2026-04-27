@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { resolveVisibleOrderStatus } from "@/features/shop/order-status";
 import { Separator } from "@/components/ui/separator";
 import { getOrder } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/api/http";
@@ -20,6 +22,13 @@ import { formatCurrency, formatDateTime, humanizeLabel } from "@/lib/format";
 import { useDemoUserStore } from "@/stores/demo-user-store";
 
 const fulfillmentStages = ["Collected", "Packed", "Shipped"];
+
+type TimelineEntry = {
+  key: string;
+  label: string;
+  meta: string;
+  dotClassName: string;
+};
 
 export function OrderDetailPage() {
   const { orderId } = useParams();
@@ -71,6 +80,40 @@ export function OrderDetailPage() {
   const activeStageIndex = fulfillmentStages.findIndex(
     (stage) => stage === order.fulfillment.status,
   );
+  const visibleOrderStatus = resolveVisibleOrderStatus(
+    order.status,
+    order.fulfillment.status,
+  );
+  const paymentTimelineEntry = getPaymentTimelineEntry(
+    order.paymentStatus,
+    order.paymentStatusUpdatedAtUtc
+  );
+  const timelineEntries: TimelineEntry[] = [
+    paymentTimelineEntry,
+    ...fulfillmentStages.map((stage, index) => {
+      const reached = activeStageIndex >= index;
+
+      const stageDate =
+        stage === "Collected"
+          ? order.fulfillment.collectedAtUtc
+          : stage === "Packed"
+            ? order.fulfillment.packedAtUtc
+            : order.fulfillment.dispatchedAtUtc;
+
+      return {
+        key: stage,
+        label: humanizeLabel(stage),
+        meta: reached
+          ? formatDateTime(
+              stageDate ?? order.fulfillment.lastUpdatedAtUtc ?? null,
+            )
+          : "Waiting upstream",
+        dotClassName: reached
+          ? "absolute left-0 top-1 inline-flex size-3 rounded-full bg-primary"
+          : "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-background",
+      };
+    }),
+  ];
 
   return (
     <div className="section-grid">
@@ -89,12 +132,15 @@ export function OrderDetailPage() {
       <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
         <div className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Summary</CardTitle>
-              <CardDescription>
-                Order placed {formatDateTime(order.createdAt)} for{" "}
-                {order.userId}
-              </CardDescription>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-1">
+                <CardTitle>Summary</CardTitle>
+                <CardDescription>
+                  Order placed {formatDateTime(order.createdAt)} for{" "}
+                  {order.userId}
+                </CardDescription>
+              </div>
+              <StatusBadge value={visibleOrderStatus} />
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
@@ -132,44 +178,22 @@ export function OrderDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="status-track space-y-4 pl-1">
-                {fulfillmentStages.map((stage, index) => {
-                  const reached = activeStageIndex >= index;
-
-                  const stageDate =
-                    stage === "Collected"
-                      ? order.fulfillment.collectedAtUtc
-                      : stage === "Packed"
-                        ? order.fulfillment.packedAtUtc
-                        : order.fulfillment.dispatchedAtUtc;
-
-                  const dateLabel = reached
-                    ? formatDateTime(
-                        stageDate ?? order.fulfillment.lastUpdatedAtUtc ?? null,
-                      )
-                    : null;
-
-                  return (
-                    <div
-                      key={stage}
-                      className="relative flex items-start gap-4 pl-6">
-                      <span
-                        className={
-                          reached
-                            ? "absolute left-0 top-1 inline-flex size-3 rounded-full bg-primary"
-                            : "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-background"
-                        }
-                      />
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold text-foreground">
-                          {humanizeLabel(stage)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {dateLabel ?? "Waiting upstream"}
-                        </p>
-                      </div>
+                {timelineEntries.map((entry) => (
+                  <div
+                    key={entry.key}
+                    className="relative flex items-start gap-4 pl-6">
+                    <span className={entry.dotClassName} />
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {entry.label}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {entry.meta}
+                      </p>
+                      
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -238,4 +262,54 @@ function BadgeTile({
       <span className="font-mono text-foreground">{value}</span>
     </div>
   );
+}
+
+function getPaymentTimelineEntry(
+  paymentStatus: string,
+  paymentStatusUpdatedAtUtc?: string | null
+): TimelineEntry {
+  const normalizedStatus = paymentStatus.trim().toLowerCase();
+  const timestampLabel = paymentStatusUpdatedAtUtc
+    ? formatDateTime(paymentStatusUpdatedAtUtc)
+    : normalizedStatus === "pending"
+      ? "Waiting for gateway confirmation"
+      : "Time not available";
+
+  if (normalizedStatus === "authorized") {
+    return {
+      key: "payment",
+      label: "Payment succeeded",
+      meta: timestampLabel,
+      dotClassName:
+        "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-primary",
+    };
+  }
+
+  if (normalizedStatus === "declined") {
+    return {
+      key: "payment",
+      label: "Payment declined",
+      meta: timestampLabel,
+      dotClassName:
+        "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-background",
+    };
+  }
+
+  if (normalizedStatus === "timedout") {
+    return {
+      key: "payment",
+      label: "Payment timed out",
+      meta: timestampLabel,
+      dotClassName:
+        "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-background",
+    };
+  }
+
+  return {
+    key: "payment",
+    label: `Payment ${humanizeLabel(paymentStatus).toLowerCase()}`,
+    meta: timestampLabel,
+    dotClassName:
+      "absolute left-0 top-1 inline-flex size-3 rounded-full border border-border bg-background",
+  };
 }
