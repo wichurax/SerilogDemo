@@ -2,6 +2,8 @@
 
 This folder contains the Bun + Vite + React frontend for the SerilogDemo workflow.
 
+In the full compose stack, a user opens this UI manually in a browser at `http://localhost:8080`. The k6 scripts are the automated counterpart: they can hit the same load-balancer routes instead of driving the UI interactively.
+
 ## Stack
 
 - React 19
@@ -25,7 +27,7 @@ bun run build
 
 ## Proxy Model
 
-The browser app calls relative paths:
+The web app calls relative paths:
 
 - `/api/*` for the main e-commerce API
 - `/fulfillment-api/*` for the Fulfillment API

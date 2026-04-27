@@ -6,7 +6,7 @@ Main branch is the starting point. Individual blog-post states live on separate 
 
 ## What This Repo Demonstrates
 
-- A main e-commerce API behind Nginx
+- A simple web app and main e-commerce API behind Nginx
 - Finite warehouse inventory with reservation, shipping deduction, and restock flows
 - A synchronous payment hop for clear end-to-end traces
 - An asynchronous RabbitMQ fan-out for eventually consistent side effects
@@ -17,7 +17,8 @@ Main branch is the starting point. Individual blog-post states live on separate 
 
 ```mermaid
 flowchart TB
-  Client[Client] --> LB[Nginx Load Balancer<br/>:8080]
+  User[App in Browser] --> LB[Nginx Load Balancer<br/>:8080]
+  K6[k6 Automated Clients] --> LB
   LB --> API[Main API]
   API --> PGW[Payment Gateway]
   API --> DB[(PostgreSQL)]
@@ -39,21 +40,21 @@ flowchart TB
   Tempo --> Grafana
   Prom --> Grafana
 
-  K6[k6 Load Test] --> LB
 ```
 
 ## Main Flow
 
-1. A client calls the main API through Nginx.
-2. The main API validates basket and order data.
-3. The main API calls the Payment Gateway synchronously.
-4. On success, the main API stores an outbox record.
-5. The outbox publisher sends an `order.paid` event to RabbitMQ.
-6. Notifications API consumes the same event on separate email and SMS queues, while Fulfillment API consumes it on its own queue.
-7. Notifications API resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
-8. Fulfillment API publishes `fulfillment.progress`, and the main API projects those updates back onto order status, fulfillment details, and warehouse stock.
+1. A user opens the web app in a browser.
+2. The web app calls the main API and Fulfillment API through the Nginx entrypoint.
+3. The main API validates basket and order data.
+4. The main API calls the Payment Gateway synchronously.
+5. On success, the main API stores an outbox record.
+6. The outbox publisher sends an `order.paid` event to RabbitMQ.
+7. Notifications API consumes the same event on separate email and SMS queues, while Fulfillment API consumes it on its own queue.
+8. Notifications API resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
+9. Fulfillment API publishes `fulfillment.progress`, and the main API projects those updates back onto order status, fulfillment details, and warehouse stock.
 
-This gives one synchronous trace segment and multiple asynchronous, broker-backed follow-up paths. Fulfillment progression stays manual by default, and the warehouse-worker k6 script can automate collect, pack, and ship during load runs.
+This gives one manual browser path, matching automated k6 client paths, and multiple asynchronous, broker-backed follow-up paths. Fulfillment progression stays manual by default, and the warehouse-worker k6 script can automate collect, pack, and ship during load runs.
 
 ## Runnable Components
 
@@ -104,6 +105,7 @@ Default local values are in [appsettings.json](appsettings.json).
 
 - Docker with `docker compose`
 - .NET 8 SDK for local development
+- Bun is only required for host-based UI development; the compose stack builds the UI container for you.
 
 ### Start Everything
 
@@ -120,7 +122,9 @@ docker compose --profile loadtest up -d --scale api=5
 
 ### Access Points
 
-- API `http://localhost:8080` and Swagger UI `http://localhost:8080/swagger` 
+- UI: `http://localhost:8080`
+- API: `http://localhost:8080/api`
+- Swagger UI: `http://localhost:8080/swagger`
 - Grafana: `http://localhost:3001`
 - RabbitMQ Management: `http://localhost:15672`
 
@@ -195,6 +199,7 @@ SerilogDemo/
 ├── FulfillmentApi/             # Fulfillment API host and async consumer
 ├── SerilogDemo.Messaging/      # Shared integration-event contracts
 ├── LogSearchTools/             # Optional log-search benchmark tool
+├── UI/                         # React frontend built into docker compose
 ├── observability/              # Grafana, Tempo, Loki, Prometheus, Collector config
 ├── nginx/                      # Nginx load balancer config
 ├── k6/                         # Load test scripts

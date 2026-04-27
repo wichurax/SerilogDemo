@@ -7,7 +7,8 @@
 #   With k6 test:  docker compose --profile loadtest up -d --scale api=5
 #
 # Access:
-#   - API:              http://localhost:8080 (via Nginx)
+#   - UI:               http://localhost:8080
+#   - API:              http://localhost:8080/api
 #   - Grafana:          http://localhost:3001 (admin/admin)
 #   - Loki:             http://localhost:3100
 ###############################################################################
@@ -249,8 +250,17 @@ services:
       - "8080"
 
   #---------------------------------------------------------------------------
-  # Load Balancer
+  # UI and Load Balancer
   #---------------------------------------------------------------------------
+
+  ui:
+    build:
+      context: ./UI
+      dockerfile: Dockerfile
+    networks:
+      - serilog-network
+    expose:
+      - "80"
 
   nginx:
     image: nginx:alpine
@@ -262,6 +272,7 @@ services:
     depends_on:
       - api
       - fulfillment-api
+      - ui
     networks:
       - serilog-network
 

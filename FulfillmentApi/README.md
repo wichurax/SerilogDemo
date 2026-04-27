@@ -56,6 +56,6 @@ Default local values are in [appsettings.json](appsettings.json).
 ## Notes
 
 - This service expects the main API outbox publisher to bind the `serilogdemo.fulfillment` queue topology.
-- Default demos can use the HTTP workflow endpoints manually. Load-test demos can pair the service with `k6/load-test-warehouse.js` to automate collect, pack, and ship transitions.
+- Default demos can use the HTTP workflow endpoints manually through the browser UI or direct HTTP calls. Load-test demos can pair the service with `k6/load-test-warehouse.js` to automate those same collect, pack, and ship transitions.
 - `GET /api/fulfillment/orders` supports `status`, `userId`, `orderNumber`, `warehouse`, and `take` query parameters.
 - Startup uses a dedicated EF migrations history table in the `fulfillment_service` schema to avoid collisions with the other services.
