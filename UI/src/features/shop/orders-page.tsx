@@ -125,5 +125,9 @@ function resolveVisibleOrderStatus(order: OrderSummary) {
     return order.status
   }
 
+  if (order.fulfillmentStatus === 'Reserved') {
+    return 'Confirmed'
+  }
+
   return order.fulfillmentStatus !== 'Pending' ? order.fulfillmentStatus : order.status
 }

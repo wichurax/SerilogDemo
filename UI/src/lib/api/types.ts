@@ -71,6 +71,8 @@ export interface OrderFulfillment {
   isPendingDelivery: boolean
   trackingReference?: string | null
   lastMessage?: string | null
+  collectedAtUtc?: string | null
+  packedAtUtc?: string | null
   dispatchedAtUtc?: string | null
   lastUpdatedAtUtc?: string | null
 }

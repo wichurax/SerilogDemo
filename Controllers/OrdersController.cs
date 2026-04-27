@@ -234,6 +234,8 @@ public class OrdersController : ControllerBase
                 order.FulfillmentStatus == OrderFulfillmentStatus.Shipped,
                 order.FulfillmentTrackingReference,
                 order.FulfillmentLastMessage,
+                order.FulfillmentCollectedAtUtc,
+                order.FulfillmentPackedAtUtc,
                 order.FulfillmentDispatchedAtUtc,
                 order.FulfillmentLastUpdatedAtUtc),
             order.CreatedAt

@@ -7,6 +7,7 @@ const badgeVariants = cva('inline-flex items-center gap-1 rounded-md border px-3
   variants: {
     variant: {
       neutral: 'border-border bg-secondary/85 text-secondary-foreground',
+      info: 'border-primary/30 bg-primary/10 text-primary',
       warning: 'border-warning/20 bg-warning/12 text-warning-foreground',
       success: 'border-success/20 bg-success/12 text-success',
       danger: 'border-destructive/20 bg-destructive/12 text-destructive',

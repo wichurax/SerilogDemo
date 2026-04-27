@@ -27,6 +27,8 @@ public class Order
     public string? FulfillmentWarehouse { get; set; }
     public string? FulfillmentTrackingReference { get; set; }
     public string? FulfillmentLastMessage { get; set; }
+    public DateTime? FulfillmentCollectedAtUtc { get; set; }
+    public DateTime? FulfillmentPackedAtUtc { get; set; }
     public DateTime? FulfillmentDispatchedAtUtc { get; set; }
     public DateTime? FulfillmentLastUpdatedAtUtc { get; set; }
     public Guid? PaymentAttemptId { get; set; }

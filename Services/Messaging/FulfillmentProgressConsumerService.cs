@@ -120,6 +120,8 @@ public sealed class FulfillmentProgressConsumerService : RabbitMqConsumerBackgro
                     : payload.TrackingReference;
                 order.FulfillmentLastMessage = payload.Message;
                 order.FulfillmentLastUpdatedAtUtc = payload.OccurredAtUtc.UtcDateTime;
+                order.FulfillmentCollectedAtUtc = payload.CollectedAtUtc?.UtcDateTime ?? order.FulfillmentCollectedAtUtc;
+                order.FulfillmentPackedAtUtc = payload.PackedAtUtc?.UtcDateTime ?? order.FulfillmentPackedAtUtc;
 
                 if (fulfillmentStatus == OrderFulfillmentStatus.Shipped)
                 {

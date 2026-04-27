@@ -82,6 +82,8 @@ public record OrderFulfillmentDto(
     bool IsPendingDelivery,
     string? TrackingReference,
     string? LastMessage,
+    DateTime? CollectedAtUtc,
+    DateTime? PackedAtUtc,
     DateTime? DispatchedAtUtc,
     DateTime? LastUpdatedAtUtc
 );

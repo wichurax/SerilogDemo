@@ -62,7 +62,6 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --font-sans: 'Outfit', sans-serif;
-  --font-serif: 'Playfair Display', serif;
   --font-mono: 'DM Mono', monospace;
 }
 
@@ -127,7 +126,7 @@ button {
 .status-track::before {
   content: '';
   position: absolute;
-  left: 0.75rem;
+  left: 0.625rem;
   top: 0.75rem;
   bottom: 0.75rem;
   width: 1px;

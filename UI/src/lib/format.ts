@@ -31,7 +31,12 @@ export function toneForStatus(value: string) {
 
   if (
     normalized.includes('authorized') ||
-    normalized.includes('confirmed') ||
+    normalized.includes('confirmed')
+  ) {
+    return 'info' as const
+  }
+
+  if (
     normalized.includes('delivered') ||
     normalized.includes('shipped') ||
     normalized.includes('success')

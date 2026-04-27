@@ -6,8 +6,6 @@ import { Toaster } from 'sonner'
 import '@fontsource/outfit/400.css'
 import '@fontsource/outfit/500.css'
 import '@fontsource/outfit/600.css'
-import '@fontsource/playfair-display/400.css'
-import '@fontsource/playfair-display/600.css'
 import '@fontsource/dm-mono/400.css'
 import '@fontsource/dm-mono/500.css'
 

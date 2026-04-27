@@ -10,4 +10,6 @@ public sealed record FulfillmentProgressIntegrationEvent(
     string? TrackingReference,
     string? Message,
     DateTimeOffset OccurredAtUtc,
+    DateTimeOffset? CollectedAtUtc,
+    DateTimeOffset? PackedAtUtc,
     DateTimeOffset? DispatchedAtUtc);

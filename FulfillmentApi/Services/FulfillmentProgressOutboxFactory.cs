@@ -19,6 +19,8 @@ internal static class FulfillmentProgressOutboxFactory
             TrackingReference: attempt.TrackingReference,
             Message: message,
             OccurredAtUtc: DateTimeOffset.UtcNow,
+            CollectedAtUtc: attempt.CollectedAtUtc.HasValue ? new DateTimeOffset(attempt.CollectedAtUtc.Value) : null,
+            PackedAtUtc: attempt.PackedAtUtc.HasValue ? new DateTimeOffset(attempt.PackedAtUtc.Value) : null,
             DispatchedAtUtc: attempt.ShippedAtUtc.HasValue ? new DateTimeOffset(attempt.ShippedAtUtc.Value) : null);
 
         return new OutboxMessage
