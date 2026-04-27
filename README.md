@@ -131,8 +131,8 @@ docker compose --profile loadtest up -d --scale api=5
 
 ### Access Points
 
-- UI (default dev flow): `http://localhost:5173`
-- UI (compose opt-in): `http://localhost:8080`
+- UI (for `bun run dev` setup): `http://localhost:5173`
+- UI (for docker compose setup): `http://localhost:8080`
 - API: `http://localhost:8080/api`
 - Swagger UI: `http://localhost:8080/swagger`
 - Grafana: `http://localhost:3001`
