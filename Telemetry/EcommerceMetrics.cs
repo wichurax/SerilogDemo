@@ -13,10 +13,10 @@ public static class EcommerceMetrics
         unit: "requests",
         description: "Counts catalog API requests.");
 
-    public static readonly Counter<long> BasketMutations = Meter.CreateCounter<long>(
-        name: "ecommerce.basket.mutations",
+    public static readonly Counter<long> CartMutations = Meter.CreateCounter<long>(
+        name: "ecommerce.cart.mutations",
         unit: "operations",
-        description: "Counts basket changes grouped by operation.");
+        description: "Counts cart changes grouped by operation.");
 
     public static readonly Counter<long> OrdersPlaced = Meter.CreateCounter<long>(
         name: "ecommerce.orders.placed",

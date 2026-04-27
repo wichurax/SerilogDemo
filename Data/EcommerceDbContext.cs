@@ -10,8 +10,8 @@ public class EcommerceDbContext : DbContext
     }
 
     public DbSet<Item> Items => Set<Item>();
-    public DbSet<Basket> Baskets => Set<Basket>();
-    public DbSet<BasketItem> BasketItems => Set<BasketItem>();
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
     public DbSet<DeliveryOption> DeliveryOptions => Set<DeliveryOption>();
     public DbSet<PaymentOption> PaymentOptions => Set<PaymentOption>();
     public DbSet<Order> Orders => Set<Order>();
@@ -52,20 +52,20 @@ public class EcommerceDbContext : DbContext
             });
         });
 
-        // Basket configuration
-        modelBuilder.Entity<Basket>(entity =>
+        // Cart configuration
+        modelBuilder.Entity<Cart>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.UserId).HasMaxLength(100).IsRequired();
             entity.HasIndex(e => e.UserId);
             entity.HasMany(e => e.Items)
-                  .WithOne(e => e.Basket)
-                  .HasForeignKey(e => e.BasketId)
+                  .WithOne(e => e.Cart)
+                  .HasForeignKey(e => e.CartId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // BasketItem configuration
-        modelBuilder.Entity<BasketItem>(entity =>
+        // CartItem configuration
+        modelBuilder.Entity<CartItem>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ItemName).HasMaxLength(200);

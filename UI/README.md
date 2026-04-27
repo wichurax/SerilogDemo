@@ -41,8 +41,9 @@ If you want to run services separately, copy `.env.example` to `.env.local` and 
 ## Current UI Areas
 
 - Shop catalog with search and category filter
-- Basket editing
+- Cart editing
 - Checkout with visible fake payment scenarios
 - Customer order list and order detail
 - Warehouse backlog with collect, pack, ship, and fail actions
 - Warehouse inventory table with restock, recount, and write-off actions
+

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { CreditCard, LoaderCircle, Truck } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { getBasket, getDeliveryOptions, getPaymentOptions, placeOrder } from '@/lib/api/client'
+import { getCart, getDeliveryOptions, getPaymentOptions, placeOrder } from '@/lib/api/client'
 import { getErrorMessage } from '@/lib/api/http'
 import type { CheckoutResult, PaymentScenario } from '@/lib/api/types'
 import { formatCurrency } from '@/lib/format'
@@ -35,9 +35,9 @@ export function CheckoutPage() {
   const queryClient = useQueryClient()
   const [result, setResult] = useState<CheckoutResult | null>(null)
 
-  const basketQuery = useQuery({
-    queryKey: ['basket', userId],
-    queryFn: () => getBasket(userId),
+  const cartQuery = useQuery({
+    queryKey: ['cart', userId],
+    queryFn: () => getCart(userId),
   })
 
   const deliveryOptionsQuery = useQuery({
@@ -58,6 +58,9 @@ export function CheckoutPage() {
       paymentScenario: 'Success',
     },
   })
+
+  const selectedDeliveryOptionId = useWatch({ control: form.control, name: 'deliveryOptionId' })
+  const selectedPaymentOptionId = useWatch({ control: form.control, name: 'paymentOptionId' })
 
   useEffect(() => {
     const currentDeliveryOptionId = form.getValues('deliveryOptionId')
@@ -90,7 +93,7 @@ export function CheckoutPage() {
     onSuccess: async (nextResult) => {
       setResult(nextResult)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['basket', userId] }),
+        queryClient.invalidateQueries({ queryKey: ['cart', userId] }),
         queryClient.invalidateQueries({ queryKey: ['orders'] }),
         queryClient.invalidateQueries({ queryKey: ['items'] }),
       ])
@@ -106,20 +109,20 @@ export function CheckoutPage() {
     },
   })
 
-  if (basketQuery.isLoading) {
-    return <EmptyState title='Loading checkout' description='We are pulling the basket and option lookups before the form appears.' />
+  if (cartQuery.isLoading) {
+    return <EmptyState title='Loading checkout' description='We are pulling the cart and option lookups before the form appears.' />
   }
 
-  if (basketQuery.isError) {
-    return <EmptyState title='Checkout is unavailable' description={getErrorMessage(basketQuery.error)} />
+  if (cartQuery.isError) {
+    return <EmptyState title='Checkout is unavailable' description={getErrorMessage(cartQuery.error)} />
   }
 
-  const basket = basketQuery.data
-  if (!basket || basket.items.length === 0) {
+  const cart = cartQuery.data
+  if (!cart || cart.items.length === 0) {
     return (
       <div className='section-grid'>
         <EmptyState
-          title='Basket is empty'
+          title='Cart is empty'
           description='Go back to the catalog, add a few items, then come back here to drive the payment gateway scenarios.'
           action={
             <Button asChild>
@@ -133,8 +136,8 @@ export function CheckoutPage() {
 
   const deliveryOptions = deliveryOptionsQuery.data ?? []
   const paymentOptions = paymentOptionsQuery.data ?? []
-  const selectedDelivery = deliveryOptions.find((option) => option.id === form.watch('deliveryOptionId'))
-  const selectedPayment = paymentOptions.find((option) => option.id === form.watch('paymentOptionId'))
+  const selectedDelivery = deliveryOptions.find((option) => option.id === selectedDeliveryOptionId)
+  const selectedPayment = paymentOptions.find((option) => option.id === selectedPaymentOptionId)
 
   return (
     <div className='section-grid'>
@@ -250,13 +253,13 @@ export function CheckoutPage() {
           <Card>
             <CardHeader>
               <CardTitle>Order summary</CardTitle>
-              <CardDescription>The totals below are composed from the live basket plus the selected delivery option.</CardDescription>
+              <CardDescription>The totals below are composed from the live cart plus the selected delivery option.</CardDescription>
             </CardHeader>
             <CardContent className='space-y-4'>
               <div className='space-y-3 rounded-xl border border-border/70 bg-secondary p-4'>
                 <div className='flex items-center justify-between'>
                   <span className='text-sm text-muted-foreground'>Items</span>
-                  <span className='font-mono text-foreground'>{formatCurrency(basket.totalPrice)}</span>
+                  <span className='font-mono text-foreground'>{formatCurrency(cart.totalPrice)}</span>
                 </div>
                 <div className='flex items-center justify-between'>
                   <span className='text-sm text-muted-foreground'>Delivery</span>
@@ -265,7 +268,7 @@ export function CheckoutPage() {
                 <div className='flex items-center justify-between border-t border-border/70 pt-3'>
                   <span className='text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground'>Total</span>
                   <span className='font-mono text-2xl text-foreground'>
-                    {formatCurrency(basket.totalPrice + (selectedDelivery?.price ?? 0))}
+                    {formatCurrency(cart.totalPrice + (selectedDelivery?.price ?? 0))}
                   </span>
                 </div>
               </div>
@@ -316,7 +319,7 @@ export function CheckoutPage() {
                     <div className='space-y-2'>
                       <p className='text-lg font-semibold text-foreground'>{result.order.orderNumber}</p>
                       <p className='text-sm leading-6 text-muted-foreground'>
-                        Payment cleared, basket should be emptied, and the order is ready for fulfillment reservation to surface in the warehouse view.
+                        Payment cleared, the cart should be emptied, and the order is ready for fulfillment reservation to surface in the warehouse view.
                       </p>
                     </div>
                     <Button asChild className='w-full'>

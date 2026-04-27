@@ -1,6 +1,6 @@
 import { requestJson, requestWithStatus } from '@/lib/api/http'
 import type {
-  Basket,
+  Cart,
   CheckoutResult,
   DeliveryOption,
   FulfillmentAttempt,
@@ -48,35 +48,35 @@ export function getItems(filters: ItemFilters = {}) {
   return requestJson<Item[]>(withQuery('/api/items', searchParams))
 }
 
-export function getBasket(userId: string) {
-  return requestJson<Basket>('/api/basket', { userId })
+export function getCart(userId: string) {
+  return requestJson<Cart>('/api/cart', { userId })
 }
 
-export function addToBasket(userId: string, input: { itemId: string; quantity: number }) {
-  return requestJson<Basket>('/api/basket/items', {
+export function addToCart(userId: string, input: { itemId: string; quantity: number }) {
+  return requestJson<Cart>('/api/cart/items', {
     method: 'POST',
     userId,
     body: input,
   })
 }
 
-export function updateBasketItem(userId: string, itemId: string, quantity: number) {
-  return requestJson<Basket>(`/api/basket/items/${itemId}`, {
+export function updateCartItem(userId: string, itemId: string, quantity: number) {
+  return requestJson<Cart>(`/api/cart/items/${itemId}`, {
     method: 'PUT',
     userId,
     body: { quantity },
   })
 }
 
-export function removeBasketItem(userId: string, itemId: string) {
-  return requestJson<Basket>(`/api/basket/items/${itemId}`, {
+export function removeCartItem(userId: string, itemId: string) {
+  return requestJson<Cart>(`/api/cart/items/${itemId}`, {
     method: 'DELETE',
     userId,
   })
 }
 
-export function clearBasket(userId: string) {
-  return requestWithStatus<void>('/api/basket', [204], {
+export function clearCart(userId: string) {
+  return requestWithStatus<void>('/api/cart', [204], {
     method: 'DELETE',
     userId,
   })

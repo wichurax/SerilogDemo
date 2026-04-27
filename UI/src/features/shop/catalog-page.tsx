@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { addToBasket, getBasket, getCategories, getItems } from "@/lib/api/client";
+import { addToCart, getCart, getCategories, getItems } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/api/http";
 import type { Item } from "@/lib/api/types";
 import { formatCurrency, pluralize } from "@/lib/format";
@@ -49,7 +49,7 @@ const sortOptions = [
 
 type SortOption = (typeof sortOptions)[number]["value"];
 
-type AddToBasketMutationState = {
+type AddToCartMutationState = {
   item: Item;
   quantity: number;
 };
@@ -83,26 +83,26 @@ export function CatalogPage() {
       }),
   });
 
-  const basketQuery = useQuery({
-    queryKey: ["basket", userId],
-    queryFn: () => getBasket(userId),
+  const cartQuery = useQuery({
+    queryKey: ["cart", userId],
+    queryFn: () => getCart(userId),
   });
 
-  const basketQuantities = useMemo(() => {
+  const cartQuantities = useMemo(() => {
     const map = new Map<string, number>();
-    for (const bi of basketQuery.data?.items ?? []) {
+    for (const bi of cartQuery.data?.items ?? []) {
       map.set(bi.itemId, bi.quantity);
     }
     return map;
-  }, [basketQuery.data]);
+  }, [cartQuery.data]);
 
-  const addToBasketMutation = useMutation({
-    mutationFn: ({ item, quantity }: AddToBasketMutationState) =>
-      addToBasket(userId, { itemId: item.id, quantity }),
+  const addToCartMutation = useMutation({
+    mutationFn: ({ item, quantity }: AddToCartMutationState) =>
+      addToCart(userId, { itemId: item.id, quantity }),
     onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["basket", userId] });
+      await queryClient.invalidateQueries({ queryKey: ["cart", userId] });
       toast.success(
-        `${variables.quantity} × ${variables.item.name} added to the basket.`,
+        `${variables.quantity} × ${variables.item.name} added to the cart.`,
       );
     },
     onError: (error) => {
@@ -289,8 +289,8 @@ export function CatalogPage() {
         <div className="space-y-6">
           <CatalogItemsGrid
             items={isGroupedByStock ? availableItems : sortedItems}
-            addToBasketMutation={addToBasketMutation}
-            basketQuantities={basketQuantities}
+            addToCartMutation={addToCartMutation}
+            cartQuantities={cartQuantities}
           />
 
           {isGroupedByStock ? (
@@ -340,8 +340,8 @@ export function CatalogPage() {
                       <div className="border-t border-border/70 p-4">
                         <CatalogItemsGrid
                           items={soldOutItems}
-                          addToBasketMutation={addToBasketMutation}
-                          basketQuantities={basketQuantities}
+                          addToCartMutation={addToCartMutation}
+                          cartQuantities={cartQuantities}
                         />
                       </div>
                     </div>
@@ -376,14 +376,14 @@ function InlineInfoTooltip({ text }: { text: string }) {
 
 function CatalogItemsGrid({
   items,
-  addToBasketMutation,
-  basketQuantities,
+  addToCartMutation,
+  cartQuantities,
 }: {
   items: Item[];
-  addToBasketMutation: ReturnType<
-    typeof useMutation<unknown, unknown, AddToBasketMutationState, unknown>
+  addToCartMutation: ReturnType<
+    typeof useMutation<unknown, unknown, AddToCartMutationState, unknown>
   >;
-  basketQuantities: Map<string, number>;
+  cartQuantities: Map<string, number>;
 }) {
   if (items.length === 0) {
     return (
@@ -399,17 +399,17 @@ function CatalogItemsGrid({
     <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
       {items.map((item) => {
         const isAdding =
-          addToBasketMutation.isPending &&
-          addToBasketMutation.variables?.item.id === item.id;
+          addToCartMutation.isPending &&
+          addToCartMutation.variables?.item.id === item.id;
 
         return (
           <div key={item.id} className="h-full overflow-visible">
             <CatalogItemCard
               item={item}
               isAdding={isAdding}
-              basketQuantity={basketQuantities.get(item.id) ?? 0}
+              cartQuantity={cartQuantities.get(item.id) ?? 0}
               onAdd={(quantity) =>
-                addToBasketMutation.mutate({ item, quantity })
+                addToCartMutation.mutate({ item, quantity })
               }
             />
           </div>
@@ -422,19 +422,19 @@ function CatalogItemsGrid({
 function CatalogItemCard({
   item,
   isAdding,
-  basketQuantity,
+  cartQuantity,
   onAdd,
 }: {
   item: Item;
   isAdding: boolean;
-  basketQuantity: number;
+  cartQuantity: number;
   onAdd: (quantity: number) => void;
 }) {
   return (
     <Card className="relative flex h-full flex-col justify-between overflow-visible">
-      {basketQuantity > 0 && (
+      {cartQuantity > 0 && (
         <div className="absolute -right-2 -top-2 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground shadow-md">
-          {basketQuantity}
+          {cartQuantity}
         </div>
       )}
       <CardHeader className="space-y-2">
@@ -449,10 +449,10 @@ function CatalogItemCard({
         <CardDescription>{item.description}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <AddToBasketControl
+        <AddToCartControl
           isPending={isAdding}
           price={item.price}
-          availableQuantity={Math.max(0, item.availableQuantity - basketQuantity)}
+          availableQuantity={Math.max(0, item.availableQuantity - cartQuantity)}
           onAdd={onAdd}
         />
       </CardContent>
@@ -478,7 +478,7 @@ function compareByCategory(left: Item, right: Item) {
   return left.name.localeCompare(right.name);
 }
 
-function AddToBasketControl({
+function AddToCartControl({
   price,
   availableQuantity,
   isPending,
@@ -550,7 +550,7 @@ function AddToBasketControl({
         disabled={isOutOfStock || isPending}
         onClick={() => onAdd(clampedQuantity)}>
         <ShoppingBag className="size-4" />
-        {isPending ? "Adding..." : `Add ${clampedQuantity} to basket`}
+        {isPending ? "Adding..." : `Add ${clampedQuantity} to cart`}
       </Button>
     </div>
   );

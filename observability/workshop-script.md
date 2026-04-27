@@ -10,7 +10,7 @@ This script is intentionally short. It is designed for a live demo that starts w
 
 ## Part 1: Happy Path
 
-1. Run the basket setup requests and place an order with the `Async Fan-Out Happy Path` request in [SerilogDemo.http](SerilogDemo.http).
+1. Run the cart setup requests and place an order with the `Async Fan-Out Happy Path` request in [SerilogDemo.http](SerilogDemo.http).
 2. Show the API response and capture the returned order number.
 3. In Tempo, run the `checkout.place_order` query from [observability/demo-queries.md](observability/demo-queries.md).
 4. Open the trace and point out the synchronous payment span, the producer span, then the notification and fulfillment consumer spans.

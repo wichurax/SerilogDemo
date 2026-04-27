@@ -1,4 +1,4 @@
-import { Boxes, CreditCard, PackageSearch, ReceiptText, ShoppingBasket, type LucideIcon } from 'lucide-react'
+import { Boxes, CreditCard, PackageSearch, ShoppingCart, ReceiptText, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { UserSwitcher } from '@/components/layout/user-switcher'
@@ -11,9 +11,9 @@ const customerNavItems = [
     icon: PackageSearch,
   },
   {
-    to: '/basket',
-    label: 'Basket',
-    icon: ShoppingBasket,
+    to: '/cart',
+    label: 'Cart',
+    icon: ShoppingCart,
   },
   {
     to: '/checkout',

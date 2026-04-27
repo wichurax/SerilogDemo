@@ -40,20 +40,20 @@ public sealed class CheckoutService : ICheckoutService
         activity?.SetTag("app.user_id", userId);
         activity?.SetTag("checkout.payment_scenario", paymentScenario?.ToString() ?? "default");
 
-        using var basketActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.load_basket", ActivityKind.Internal);
-        var basket = await _context.Baskets
-            .Include(b => b.Items)
-            .FirstOrDefaultAsync(b => b.UserId == userId, cancellationToken);
+        using var cartActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.load_cart", ActivityKind.Internal);
+        var cart = await _context.Carts
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
 
-        if (basket is null || basket.Items.Count == 0)
+        if (cart is null || cart.Items.Count == 0)
         {
-            basketActivity?.SetTag("checkout.valid", false);
+            cartActivity?.SetTag("checkout.valid", false);
             RecordCheckoutMetrics("validation_failed", paymentMethodCode: "unknown", stopwatch.Elapsed.TotalMilliseconds);
-            return CheckoutResult.ValidationFailed("Cannot place order with an empty basket");
+            return CheckoutResult.ValidationFailed("Cannot place order with an empty cart");
         }
 
-        basketActivity?.SetTag("basket.id", basket.Id);
-        basketActivity?.SetTag("basket.item_count", basket.Items.Count);
+        cartActivity?.SetTag("cart.id", cart.Id);
+        cartActivity?.SetTag("cart.item_count", cart.Items.Count);
 
         using var validationActivity = EcommerceDiagnostics.ActivitySource.StartActivity("checkout.validate_options", ActivityKind.Internal);
         var deliveryOption = await _context.DeliveryOptions.FindAsync([request.DeliveryOptionId], cancellationToken);
@@ -75,7 +75,7 @@ public sealed class CheckoutService : ICheckoutService
         validationActivity?.SetTag("delivery.option", deliveryOption.Name);
         validationActivity?.SetTag("payment.option", paymentOption.Name);
 
-        var orderLines = basket.Items
+        var orderLines = cart.Items
             .Select(item => new InventoryQuantityChange(item.ItemId, item.ItemName, item.Quantity))
             .ToArray();
 
@@ -101,14 +101,14 @@ public sealed class CheckoutService : ICheckoutService
                 DeliveryOptionId = deliveryOption.Id,
                 DeliveryPrice = deliveryOption.Price,
                 PaymentOptionId = paymentOption.Id,
-                ItemsTotal = basket.TotalPrice,
-                TotalPrice = basket.TotalPrice + deliveryOption.Price,
+                ItemsTotal = cart.TotalPrice,
+                TotalPrice = cart.TotalPrice + deliveryOption.Price,
                 Status = OrderStatus.Pending,
                 PaymentStatus = PaymentStatus.Pending,
                 FulfillmentStatus = OrderFulfillmentStatus.Pending,
                 FulfillmentWarehouse = _inventoryService.WarehouseName,
                 FulfillmentLastMessage = "Awaiting fulfillment reservation acknowledgement.",
-                Items = basket.Items
+                Items = cart.Items
                     .Select(bi => new OrderItem 
                         {
                             Id = Guid.NewGuid(),
@@ -200,8 +200,8 @@ public sealed class CheckoutService : ICheckoutService
                             OccurredAtUtc = orderPaidEvent.OccurredAtUtc.UtcDateTime
                         });
 
-                        _context.BasketItems.RemoveRange(basket.Items);
-                        _context.Baskets.Remove(basket);
+                        _context.CartItems.RemoveRange(cart.Items);
+                        _context.Carts.Remove(cart);
                         await _context.SaveChangesAsync(cancellationToken);
                     }
 

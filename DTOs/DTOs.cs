@@ -12,17 +12,17 @@ public record ItemDto(
     int AvailableQuantity
 );
 
-public record BasketDto(
+public record CartDto(
     Guid Id,
     string UserId,
-    List<BasketItemDto> Items,
+    List<CartItemDto> Items,
     decimal TotalPrice,
     int TotalItems,
     DateTime CreatedAt,
     DateTime UpdatedAt
 );
 
-public record BasketItemDto(
+public record CartItemDto(
     Guid Id,
     Guid ItemId,
     string ItemName,
@@ -31,12 +31,12 @@ public record BasketItemDto(
     decimal TotalPrice
 );
 
-public record AddToBasketRequest(
+public record AddToCartRequest(
     Guid ItemId,
     int Quantity = 1
 );
 
-public record UpdateBasketItemRequest(
+public record UpdateCartItemRequest(
     int Quantity
 );
 

@@ -26,16 +26,16 @@ erDiagram
     int QuantityReserved
   }
 
-  PUBLIC_BASKETS {
+  PUBLIC_CARTS {
     uuid Id PK
     string UserId
     datetime CreatedAt
     datetime UpdatedAt
   }
 
-  PUBLIC_BASKET_ITEMS {
+  PUBLIC_CART_ITEMS {
     uuid Id PK
-    uuid BasketId FK
+    uuid CartId FK
     uuid ItemId FK
     int Quantity
     decimal UnitPrice
@@ -156,8 +156,8 @@ erDiagram
   }
 
   PUBLIC_ITEMS ||--o{ PUBLIC_WAREHOUSE_INVENTORIES : stocked_as
-  PUBLIC_BASKETS ||--o{ PUBLIC_BASKET_ITEMS : contains
-  PUBLIC_ITEMS ||--o{ PUBLIC_BASKET_ITEMS : referenced_by
+  PUBLIC_CARTS ||--o{ PUBLIC_CART_ITEMS : contains
+  PUBLIC_ITEMS ||--o{ PUBLIC_CART_ITEMS : referenced_by
   PUBLIC_DELIVERY_OPTIONS ||--o{ PUBLIC_ORDERS : selected_for
   PUBLIC_PAYMENT_OPTIONS ||--o{ PUBLIC_ORDERS : selected_for
   PUBLIC_ORDERS ||--o{ PUBLIC_ORDER_ITEMS : contains
@@ -192,8 +192,8 @@ Relationship legend:
 
 - `Items`: product catalog
 - `WarehouseInventories`: per-item stock and reservation counts by warehouse
-- `Baskets`: one basket per user session
-- `BasketItems`: basket line items linked to baskets and catalog items
+- `Carts`: one cart per user session
+- `CartItems`: cart line items linked to carts and catalog items
 - `DeliveryOptions`: shipping methods used during checkout
 - `PaymentOptions`: payment methods used during checkout
 - `Orders`: placed orders with payment and fulfillment state

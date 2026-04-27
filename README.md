@@ -46,7 +46,7 @@ flowchart TB
 
 1. A user opens the web app in a browser.
 2. The web app calls the main API and Fulfillment API through the Nginx entrypoint.
-3. The main API validates basket and order data.
+3. The main API validates cart and order data.
 4. The main API calls the Payment Gateway synchronously.
 5. On success, the main API stores an outbox record.
 6. The outbox publisher sends an `order.paid` event to RabbitMQ.
@@ -68,11 +68,11 @@ This gives one manual browser path, matching automated k6 client paths, and mult
 
 ## Main API
 
-The main API is the front door of the system. It owns the catalog, basket, delivery and payment-option lookup, warehouse inventory commands, order placement, payment orchestration, outbox publication, and fulfillment progress projection.
+The main API is the front door of the system. It owns the catalog, cart, delivery and payment-option lookup, warehouse inventory commands, order placement, payment orchestration, outbox publication, and fulfillment progress projection.
 
 ### Main API Features
 
-- Catalog, basket, delivery, payment-option, and order endpoints
+- Catalog, cart, delivery, payment-option, and order endpoints
 - Warehouse inventory read and adjustment endpoints for restock, write-off, and recount workflows
 - Checkout orchestration with manual business spans
 - Synchronous Payment Gateway integration
@@ -149,7 +149,7 @@ The main API order endpoint accepts the `X-Payment-Scenario` header for determin
 
 This repo now uses three separate k6 scripts:
 
-- [k6/load-test.js](k6/load-test.js): ecommerce users hitting the main API through Nginx with browse, basket, checkout, and order-status polling behavior.
+- [k6/load-test.js](k6/load-test.js): ecommerce users hitting the main API through Nginx with browse, cart, checkout, and order-status polling behavior.
 - [k6/load-test-warehouse.js](k6/load-test-warehouse.js): warehouse workers hitting the Fulfillment API directly to collect, pack, ship, and inspect fulfillment backlog.
 - [k6/load-test-restock.js](k6/load-test-restock.js): a replenishment worker that watches warehouse availability and tops stock back up through the existing warehouse API when items fall below a configurable low-water mark.
 
@@ -218,3 +218,4 @@ SerilogDemo/
 ├── SerilogDemo.http            # Main API request samples
 └── appsettings.json            # Main API defaults
 ```
+

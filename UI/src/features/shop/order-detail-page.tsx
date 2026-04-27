@@ -123,11 +123,6 @@ export function OrderDetailPage() {
                   value={`${order.deliveryOption.estimatedDaysMin}-${order.deliveryOption.estimatedDaysMax} days`}
                 />
               </div>
-              {order.paymentFailureReason ? (
-                <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-4 text-sm leading-6 text-destructive">
-                  {order.paymentFailureReason}
-                </div>
-              ) : null}
             </CardContent>
           </Card>
 

@@ -9,7 +9,7 @@ namespace SerilogDemo.Services.Checkout;
 public interface ICheckoutService
 {
     /// <summary>
-    /// Places an order for the given user and current basket contents.
+    /// Places an order for the given user and current cart contents.
     /// </summary>
     /// <param name="userId">The user placing the order.</param>
     /// <param name="request">The selected delivery and payment options.</param>

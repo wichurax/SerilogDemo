@@ -3,7 +3,7 @@
  *
  * This script models short customer sessions instead of raw endpoint hammering.
  * Each iteration creates a fresh session identity so order volume is limited
- * only by test duration, while still preserving realistic browse, basket,
+ * only by test duration, while still preserving realistic browse, cart,
  * checkout, and post-purchase polling behavior.
  *
  * Pair this with load-test-warehouse.js when you want automated fulfillment
@@ -49,7 +49,7 @@ const checkoutDeclined = new Counter('checkout_declined');
 const checkoutTimedOut = new Counter('checkout_timed_out');
 const checkoutValidationFailed = new Counter('checkout_validation_failed');
 const checkoutStockValidationFailed = new Counter('checkout_stock_validation_failed');
-const basketOperations = new Counter('basket_operations');
+const cartOperations = new Counter('cart_operations');
 const cartAbandonments = new Counter('cart_abandonments');
 const orderStatusPolls = new Counter('order_status_polls');
 const itemsViewed = new Counter('items_viewed');
@@ -66,8 +66,8 @@ const defaultHeaders = {
 
 const okResponse = http.expectedStatuses(200);
 const itemDetailResponse = http.expectedStatuses(200, 404);
-const basketMutationResponse = http.expectedStatuses(200, 201, 409);
-const basketClearResponse = http.expectedStatuses(204);
+const cartMutationResponse = http.expectedStatuses(200, 201, 409);
+const cartClearResponse = http.expectedStatuses(204);
 const checkoutResponse = http.expectedStatuses(201, 202, 400, 409);
 const healthProbeResponse = http.expectedStatuses({ min: 200, max: 599 });
 
@@ -125,12 +125,12 @@ function runBrowserJourney(data, persona) {
     browseCatalog(data, persona, randomIntBetween(2, 4));
 
     if (Math.random() < 0.18) {
-        const basketReady = buildBasketForSession(data, persona, randomIntBetween(1, 2));
-        if (basketReady) {
-            viewBasket(persona.userId);
+        const CartReady = buildCartForSession(data, persona, randomIntBetween(1, 2));
+        if (CartReady) {
+            viewCart(persona.userId);
 
             if (Math.random() < 0.6) {
-                checkoutBasket(data, persona);
+                checkoutCart(data, persona);
             } else {
                 cartAbandonments.add(1);
             }
@@ -145,26 +145,26 @@ function runBrowserJourney(data, persona) {
 function runShopperJourney(data, persona) {
     browseCatalog(data, persona, randomIntBetween(1, 3));
 
-    const basketReady = buildBasketForSession(data, persona, randomIntBetween(1, 3));
-    if (!basketReady) {
+    const CartReady = buildCartForSession(data, persona, randomIntBetween(1, 3));
+    if (!CartReady) {
         humanPause(1.0, 2.5);
         return;
     }
 
-    viewBasket(persona.userId);
+    viewCart(persona.userId);
 
     if (Math.random() < SHOPPER_ABANDON_RATE) {
         cartAbandonments.add(1);
 
         if (Math.random() < 0.35) {
-            clearBasket(persona.userId);
+            clearCart(persona.userId);
         }
 
         humanPause(2.0, 4.5);
         return;
     }
 
-    checkoutBasket(data, persona);
+    checkoutCart(data, persona);
     humanPause(2.0, 5.0);
 }
 
@@ -175,13 +175,13 @@ function runBuyerJourney(data, persona) {
 
     browseCatalog(data, persona, randomIntBetween(1, 2));
 
-    const basketReady = buildBasketForSession(data, persona, randomIntBetween(2, 4));
-    if (!basketReady) {
+    const CartReady = buildCartForSession(data, persona, randomIntBetween(2, 4));
+    if (!CartReady) {
         humanPause(1.0, 2.5);
         return;
     }
 
-    checkoutBasket(data, persona);
+    checkoutCart(data, persona);
     humanPause(2.0, 4.5);
 }
 
@@ -250,12 +250,12 @@ function browseCatalog(data, persona, steps) {
     }
 }
 
-function buildBasketForSession(data, persona, targetItems) {
-    let basket = getBasket(persona.userId);
+function buildCartForSession(data, persona, targetItems) {
+    let cart = getCart(persona.userId);
 
-    if (basket.totalItems > 5 || Math.random() < 0.12) {
-        clearBasket(persona.userId);
-        basket = emptyBasket(persona.userId);
+    if (cart.totalItems > 5 || Math.random() < 0.12) {
+        clearCart(persona.userId);
+        cart = emptyCart(persona.userId);
     }
 
     let selectedItems = pickDistinctItems(data, persona, targetItems);
@@ -268,8 +268,8 @@ function buildBasketForSession(data, persona, targetItems) {
 
     for (let index = 0; index < selectedItems.length; index += 1) {
         const item = selectedItems[index];
-        const quantity = chooseBasketQuantity(item);
-        if (addToBasket(persona.userId, item.id, quantity)) {
+        const quantity = chooseCartQuantity(item);
+        if (addToCart(persona.userId, item.id, quantity)) {
             successfulAdds += 1;
         }
 
@@ -278,63 +278,63 @@ function buildBasketForSession(data, persona, targetItems) {
         }
     }
 
-    basket = getBasket(persona.userId);
-    if (basket.items.length > 0 && Math.random() < 0.22) {
-        tweakBasket(persona.userId, basket);
-        basket = getBasket(persona.userId);
+    cart = getCart(persona.userId);
+    if (cart.items.length > 0 && Math.random() < 0.22) {
+        tweakCart(persona.userId, cart);
+        cart = getCart(persona.userId);
     }
 
-    return successfulAdds > 0 && basket.totalItems > 0;
+    return successfulAdds > 0 && cart.totalItems > 0;
 }
 
-function tweakBasket(userId, basket) {
-    const basketItem = randomItem(basket.items);
-    if (!basketItem) {
+function tweakCart(userId, cart) {
+    const cartItem = randomItem(cart.items);
+    if (!cartItem) {
         return;
     }
 
     if (Math.random() < 0.35) {
-        const deleteRes = http.del(`${BASE_URL}/api/basket/items/${basketItem.itemId}`, null, {
+        const deleteRes = http.del(`${BASE_URL}/api/cart/items/${cartItem.itemId}`, null, {
             headers: getHeaders(userId),
             responseCallback: okResponse,
         });
 
-        basketOperations.add(1);
+        cartOperations.add(1);
         recordUnexpected(deleteRes.status === 200);
-        check(deleteRes, { 'basket remove returned 200': (res) => res.status === 200 });
+        check(deleteRes, { 'cart remove returned 200': (res) => res.status === 200 });
         return;
     }
 
-    const nextQuantity = Math.max(1, randomIntBetween(1, Math.max(2, basketItem.quantity + 1)));
+    const nextQuantity = Math.max(1, randomIntBetween(1, Math.max(2, cartItem.quantity + 1)));
     const updateRes = http.put(
-        `${BASE_URL}/api/basket/items/${basketItem.itemId}`,
+        `${BASE_URL}/api/cart/items/${cartItem.itemId}`,
         JSON.stringify({ quantity: nextQuantity }),
         {
             headers: getHeaders(userId),
-            responseCallback: basketMutationResponse,
+            responseCallback: cartMutationResponse,
         }
     );
 
-    basketOperations.add(1);
+    cartOperations.add(1);
     if (updateRes.status === 409) {
         inventoryConflicts.add(1);
     }
 
     recordUnexpected(updateRes.status === 200 || updateRes.status === 409);
-    check(updateRes, { 'basket update returned 200 or 409': (res) => res.status === 200 || res.status === 409 });
+    check(updateRes, { 'cart update returned 200 or 409': (res) => res.status === 200 || res.status === 409 });
 }
 
-function addToBasket(userId, itemId, quantity) {
+function addToCart(userId, itemId, quantity) {
     const res = http.post(
-        `${BASE_URL}/api/basket/items`,
+        `${BASE_URL}/api/cart/items`,
         JSON.stringify({ itemId, quantity }),
         {
             headers: getHeaders(userId),
-            responseCallback: basketMutationResponse,
+            responseCallback: cartMutationResponse,
         }
     );
 
-    basketOperations.add(1);
+    cartOperations.add(1);
 
     if (res.status === 409) {
         inventoryConflicts.add(1);
@@ -342,34 +342,34 @@ function addToBasket(userId, itemId, quantity) {
 
     const accepted = res.status === 200 || res.status === 201 || res.status === 409;
     recordUnexpected(accepted);
-    check(res, { 'basket add returned 200, 201 or 409': (response) => accepted });
+    check(res, { 'cart add returned 200, 201 or 409': (response) => accepted });
 
     return res.status === 200 || res.status === 201;
 }
 
-function viewBasket(userId) {
-    const res = http.get(`${BASE_URL}/api/basket`, {
+function viewCart(userId) {
+    const res = http.get(`${BASE_URL}/api/cart`, {
         headers: getHeaders(userId),
         responseCallback: okResponse,
     });
 
     recordUnexpected(res.status === 200);
-    check(res, { 'basket view returned 200': (response) => response.status === 200 });
-    return parseJson(res.body, emptyBasket(userId));
+    check(res, { 'cart view returned 200': (response) => response.status === 200 });
+    return parseJson(res.body, emptyCart(userId));
 }
 
-function clearBasket(userId) {
-    const res = http.del(`${BASE_URL}/api/basket`, null, {
+function clearCart(userId) {
+    const res = http.del(`${BASE_URL}/api/cart`, null, {
         headers: getHeaders(userId),
-        responseCallback: basketClearResponse,
+        responseCallback: cartClearResponse,
     });
 
-    basketOperations.add(1);
+    cartOperations.add(1);
     recordUnexpected(res.status === 204);
-    check(res, { 'basket clear returned 204': (response) => response.status === 204 });
+    check(res, { 'cart clear returned 204': (response) => response.status === 204 });
 }
 
-function checkoutBasket(data, persona) {
+function checkoutCart(data, persona) {
     checkoutAttempts.add(1);
 
     const deliveryRes = http.get(`${BASE_URL}/api/deliveryoptions`, { headers: defaultHeaders, responseCallback: okResponse });
@@ -422,7 +422,7 @@ function checkoutBasket(data, persona) {
             refreshCatalogSnapshot();
 
             if (Math.random() < 0.5) {
-                clearBasket(persona.userId);
+                clearCart(persona.userId);
             }
         }
 
@@ -438,7 +438,7 @@ function checkoutBasket(data, persona) {
         check(res, { 'checkout decline returned 409': (response) => response.status === 409 });
 
         if (Math.random() < 0.35) {
-            clearBasket(persona.userId);
+            clearCart(persona.userId);
         }
 
         return;
@@ -451,7 +451,7 @@ function checkoutBasket(data, persona) {
         check(res, { 'checkout timeout returned 202': (response) => response.status === 202 });
 
         if (Math.random() < 0.25) {
-            clearBasket(persona.userId);
+            clearCart(persona.userId);
         }
 
         return;
@@ -511,18 +511,18 @@ function pollOrderStatus(persona, polls) {
     }
 }
 
-function getBasket(userId) {
-    const res = http.get(`${BASE_URL}/api/basket`, {
+function getCart(userId) {
+    const res = http.get(`${BASE_URL}/api/cart`, {
         headers: getHeaders(userId),
         responseCallback: okResponse,
     });
 
     recordUnexpected(res.status === 200);
     if (res.status !== 200) {
-        return emptyBasket(userId);
+        return emptyCart(userId);
     }
 
-    return parseJson(res.body, emptyBasket(userId));
+    return parseJson(res.body, emptyCart(userId));
 }
 
 function waitForApi() {
@@ -706,7 +706,7 @@ function choosePaymentScenario() {
     return 'Timeout';
 }
 
-function chooseBasketQuantity(item) {
+function chooseCartQuantity(item) {
     const availableQuantity = Number.isFinite(item.availableQuantity) ? item.availableQuantity : 3;
     const upperBound = Math.max(1, Math.min(3, availableQuantity));
     return randomIntBetween(1, upperBound);
@@ -756,7 +756,7 @@ function getHeaders(userId, extraHeaders) {
     };
 }
 
-function emptyBasket(userId) {
+function emptyCart(userId) {
     return {
         id: null,
         userId,
@@ -782,4 +782,6 @@ function humanPause(minSeconds, maxSeconds) {
     const milliseconds = randomIntBetween(Math.round(minSeconds * 1000), Math.round(maxSeconds * 1000));
     sleep(milliseconds / 1000);
 }
+
+
 

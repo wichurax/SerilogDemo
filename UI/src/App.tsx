@@ -31,11 +31,11 @@ const router = createBrowserRouter([
         },
       },
       {
-        path: 'basket',
+        path: 'cart',
         hydrateFallbackElement: <RouteLoadingState />,
         lazy: async () => {
-          const { BasketPage } = await import('@/features/shop/basket-page')
-          return { Component: BasketPage }
+          const { CartPage } = await import('@/features/shop/cart-page')
+          return { Component: CartPage }
         },
       },
       {

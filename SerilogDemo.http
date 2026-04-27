@@ -4,7 +4,7 @@
 # This file contains all API endpoints for the e-commerce demo.
 # Use VS Code REST Client extension or JetBrains HTTP Client to run these.
 #
-# Flow: Browse Items → Add to Basket → Select Delivery/Payment → Place Order
+# Flow: Browse Items → Add to Cart → Select Delivery/Payment → Place Order
 ###############################################################################
 
 # @baseUrl = http://localhost:5299
@@ -44,17 +44,17 @@ GET {{baseUrl}}/api/items?search=monitor
 Accept: application/json
 
 ###############################################################################
-# SHOPPING BASKET
-# All basket operations require X-User-Id header
+# SHOPPING CART
+# All cart operations require X-User-Id header
 ###############################################################################
 
-### Get current basket (empty initially)
-GET {{baseUrl}}/api/basket
+### Get current cart (empty initially)
+GET {{baseUrl}}/api/cart
 Accept: application/json
 X-User-Id: {{userId}}
 
-### Add item to basket - Wireless Headphones (qty: 2)
-POST {{baseUrl}}/api/basket/items
+### Add item to cart - Wireless Headphones (qty: 2)
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -64,7 +64,7 @@ X-User-Id: {{userId}}
 }
 
 ### Add another item - Mechanical Keyboard (qty: 1)
-POST {{baseUrl}}/api/basket/items
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -74,7 +74,7 @@ X-User-Id: {{userId}}
 }
 
 ### Add item - USB-C Hub (qty: 1)
-POST {{baseUrl}}/api/basket/items
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -83,13 +83,13 @@ X-User-Id: {{userId}}
     "quantity": 1
 }
 
-### View basket with items
-GET {{baseUrl}}/api/basket
+### View cart with items
+GET {{baseUrl}}/api/cart
 Accept: application/json
 X-User-Id: {{userId}}
 
-### Update item quantity in basket (change headphones to qty: 1)
-PUT {{baseUrl}}/api/basket/items/00000000-0000-0000-0000-000000000001
+### Update item quantity in cart (change headphones to qty: 1)
+PUT {{baseUrl}}/api/cart/items/00000000-0000-0000-0000-000000000001
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -97,12 +97,12 @@ X-User-Id: {{userId}}
     "quantity": 1
 }
 
-### Remove item from basket
-DELETE {{baseUrl}}/api/basket/items/00000000-0000-0000-0000-000000000004
+### Remove item from cart
+DELETE {{baseUrl}}/api/cart/items/00000000-0000-0000-0000-000000000004
 X-User-Id: {{userId}}
 
-### Clear entire basket
-DELETE {{baseUrl}}/api/basket
+### Clear entire cart
+DELETE {{baseUrl}}/api/cart
 X-User-Id: {{userId}}
 
 ###############################################################################
@@ -143,10 +143,10 @@ Accept: application/json
 
 ###############################################################################
 # ORDERS
-# Requires items in basket before placing an order
+# Requires items in cart before placing an order
 ###############################################################################
 
-### Step 1: Add items to basket first (run the basket POST requests above)
+### Step 1: Add items to cart first (run the cart POST requests above)
 
 ### Step 2: Place an order (DPD Standard + Credit Card)
 POST {{baseUrl}}/api/orders
@@ -231,8 +231,8 @@ Accept: application/json
 GET {{baseUrl}}/api/items/categories/Electronics
 Accept: application/json
 
-### 2. Add 4K Monitor 27" to basket
-POST {{baseUrl}}/api/basket/items
+### 2. Add 4K Monitor 27" to cart
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -241,8 +241,8 @@ X-User-Id: {{userId}}
     "quantity": 1
 }
 
-### 3. Add Mechanical Gaming Keyboard to basket
-POST {{baseUrl}}/api/basket/items
+### 3. Add Mechanical Gaming Keyboard to cart
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{userId}}
 
@@ -251,8 +251,8 @@ X-User-Id: {{userId}}
     "quantity": 1
 }
 
-### 4. View basket
-GET {{baseUrl}}/api/basket
+### 4. View cart
+GET {{baseUrl}}/api/cart
 Accept: application/json
 X-User-Id: {{userId}}
 
@@ -285,8 +285,8 @@ GET {{baseUrl}}/api/orders
 Accept: application/json
 X-User-Id: {{userId}}
 
-### 9. Verify basket is now empty
-GET {{baseUrl}}/api/basket
+### 9. Verify cart is now empty
+GET {{baseUrl}}/api/cart
 Accept: application/json
 X-User-Id: {{userId}}
 
@@ -297,8 +297,8 @@ X-User-Id: {{userId}}
 
 @asyncDemoUserId = workshop-user-001
 
-### Async Fan-Out Happy Path - add item to basket
-POST {{baseUrl}}/api/basket/items
+### Async Fan-Out Happy Path - add item to cart
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{asyncDemoUserId}}
 
@@ -326,8 +326,8 @@ X-Payment-Scenario: Success
 
 @channelPreferenceUserId = demo-user-002
 
-### Async Fan-Out Channel Preference Demo - add item to basket
-POST {{baseUrl}}/api/basket/items
+### Async Fan-Out Channel Preference Demo - add item to cart
+POST {{baseUrl}}/api/cart/items
 Content-Type: application/json
 X-User-Id: {{channelPreferenceUserId}}
 
@@ -353,3 +353,4 @@ X-Payment-Scenario: Success
         "country": "USA"
     }
 }
+

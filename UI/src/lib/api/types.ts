@@ -20,7 +20,7 @@ export interface Item {
   availableQuantity: number
 }
 
-export interface BasketItem {
+export interface CartItem {
   id: string
   itemId: string
   itemName: string
@@ -29,10 +29,10 @@ export interface BasketItem {
   totalPrice: number
 }
 
-export interface Basket {
+export interface Cart {
   id: string
   userId: string
-  items: BasketItem[]
+  items: CartItem[]
   totalPrice: number
   totalItems: number
   createdAt: string

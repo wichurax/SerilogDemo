@@ -143,7 +143,7 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
-    /// Place a new order from the current basket.
+    /// Place a new order from the current cart.
     /// </summary>
     [HttpPost]
     public async Task<ActionResult<OrderDto>> PlaceOrder([FromBody] PlaceOrderRequest request)
