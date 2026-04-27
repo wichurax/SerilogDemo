@@ -24,13 +24,15 @@ The Fulfillment API demonstrates a second broker-backed side effect on the same 
 docker compose up -d fulfillment-api rabbitmq
 ```
 
+In the full compose stack, the service is exposed to the host through Nginx at `http://localhost:8080/fulfillment-api/api/fulfillment/orders`.
+
 ### Local Run
 
 ```bash
 dotnet run --project FulfillmentApi/FulfillmentApi.csproj
 ```
 
-The service exposes `/health` plus workflow endpoints under `/api/fulfillment/orders`.
+When run directly, the service exposes `/health` plus workflow endpoints under `/api/fulfillment/orders`.
 
 ## Required Configuration
 

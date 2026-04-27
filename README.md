@@ -7,6 +7,7 @@ Main branch is the starting point. Individual blog-post states live on separate 
 ## What This Repo Demonstrates
 
 - A main e-commerce API behind Nginx
+- Finite warehouse inventory with reservation, shipping deduction, and restock flows
 - A synchronous payment hop for clear end-to-end traces
 - An asynchronous RabbitMQ fan-out for eventually consistent side effects
 - Correlated traces, logs, and metrics across multiple .NET services
@@ -50,6 +51,7 @@ flowchart TB
 5. The outbox publisher sends an `order.paid` event to RabbitMQ.
 6. Notifications API consumes the same event on separate email and SMS queues, while Fulfillment API consumes it on its own queue.
 7. Notifications API resolves fake user contact preferences, logs fake email or SMS payloads when the channel is enabled, and persists one delivery record per channel.
+8. Fulfillment API publishes `fulfillment.progress`, and the main API projects those updates back onto order status, fulfillment details, and warehouse stock.
 
 This gives one synchronous trace segment and multiple asynchronous, broker-backed follow-up paths. Fulfillment progression stays manual by default, and the warehouse-worker k6 script can automate collect, pack, and ship during load runs.
 
@@ -65,14 +67,16 @@ This gives one synchronous trace segment and multiple asynchronous, broker-backe
 
 ## Main API
 
-The main API is the front door of the system. It owns the catalog, basket, delivery and payment-option lookup, order placement, payment orchestration, and outbox publication.
+The main API is the front door of the system. It owns the catalog, basket, delivery and payment-option lookup, warehouse inventory commands, order placement, payment orchestration, outbox publication, and fulfillment progress projection.
 
 ### Main API Features
 
 - Catalog, basket, delivery, payment-option, and order endpoints
+- Warehouse inventory read and adjustment endpoints for restock, write-off, and recount workflows
 - Checkout orchestration with manual business spans
 - Synchronous Payment Gateway integration
 - Outbox persistence and RabbitMQ publishing for `order.paid`
+- RabbitMQ consumption for `fulfillment.progress` to keep order and inventory projections current
 - RabbitMQ fan-out to notification and fulfillment consumers with propagated trace context
 - Structured logs and custom metrics for checkout flow
 
@@ -87,6 +91,7 @@ The main API is the front door of the system. It owns the catalog, basket, deliv
 - `RabbitMq__VirtualHost`: RabbitMQ virtual host
 - `RabbitMq__PublishEnabled`: enables or disables outbox publishing
 - `RabbitMq__PublishIntervalSeconds`: outbox polling interval
+- `Warehouse__DefaultWarehouseName`: logical warehouse used by inventory endpoints and projections
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP base endpoint
 - `OTEL_EXPORTER_OTLP_PROTOCOL`: exporter protocol, expected `http/protobuf`
 - `OTEL_SERVICE_NAME`: logical service name, usually `serilogdemo-api`
@@ -115,7 +120,7 @@ docker compose --profile loadtest up -d --scale api=5
 
 ### Access Points
 
-- API and Swagger: `http://localhost:8080`
+- API `http://localhost:8080` and Swagger UI `http://localhost:8080/swagger` 
 - Grafana: `http://localhost:3001`
 - RabbitMQ Management: `http://localhost:15672`
 
