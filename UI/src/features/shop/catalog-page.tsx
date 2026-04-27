@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { addToBasket, getCategories, getItems } from "@/lib/api/client";
+import { addToBasket, getBasket, getCategories, getItems } from "@/lib/api/client";
 import { getErrorMessage } from "@/lib/api/http";
 import type { Item } from "@/lib/api/types";
 import { formatCurrency, pluralize } from "@/lib/format";
@@ -82,6 +82,19 @@ export function CatalogPage() {
         search: deferredSearch || undefined,
       }),
   });
+
+  const basketQuery = useQuery({
+    queryKey: ["basket", userId],
+    queryFn: () => getBasket(userId),
+  });
+
+  const basketQuantities = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const bi of basketQuery.data?.items ?? []) {
+      map.set(bi.itemId, bi.quantity);
+    }
+    return map;
+  }, [basketQuery.data]);
 
   const addToBasketMutation = useMutation({
     mutationFn: ({ item, quantity }: AddToBasketMutationState) =>
@@ -277,6 +290,7 @@ export function CatalogPage() {
           <CatalogItemsGrid
             items={isGroupedByStock ? availableItems : sortedItems}
             addToBasketMutation={addToBasketMutation}
+            basketQuantities={basketQuantities}
           />
 
           {isGroupedByStock ? (
@@ -327,6 +341,7 @@ export function CatalogPage() {
                         <CatalogItemsGrid
                           items={soldOutItems}
                           addToBasketMutation={addToBasketMutation}
+                          basketQuantities={basketQuantities}
                         />
                       </div>
                     </div>
@@ -362,11 +377,13 @@ function InlineInfoTooltip({ text }: { text: string }) {
 function CatalogItemsGrid({
   items,
   addToBasketMutation,
+  basketQuantities,
 }: {
   items: Item[];
   addToBasketMutation: ReturnType<
     typeof useMutation<unknown, unknown, AddToBasketMutationState, unknown>
   >;
+  basketQuantities: Map<string, number>;
 }) {
   if (items.length === 0) {
     return (
@@ -386,10 +403,11 @@ function CatalogItemsGrid({
           addToBasketMutation.variables?.item.id === item.id;
 
         return (
-          <div key={item.id} className="h-full">
+          <div key={item.id} className="h-full overflow-visible">
             <CatalogItemCard
               item={item}
               isAdding={isAdding}
+              basketQuantity={basketQuantities.get(item.id) ?? 0}
               onAdd={(quantity) =>
                 addToBasketMutation.mutate({ item, quantity })
               }
@@ -404,21 +422,27 @@ function CatalogItemsGrid({
 function CatalogItemCard({
   item,
   isAdding,
+  basketQuantity,
   onAdd,
 }: {
   item: Item;
   isAdding: boolean;
+  basketQuantity: number;
   onAdd: (quantity: number) => void;
 }) {
   return (
-    <Card className="flex h-full flex-col justify-between">
+    <Card className="relative flex h-full flex-col justify-between overflow-visible">
+      {basketQuantity > 0 && (
+        <div className="absolute -right-2 -top-2 z-10 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold text-primary-foreground shadow-md">
+          {basketQuantity}
+        </div>
+      )}
       <CardHeader className="space-y-2">
         <div className="flex items-start justify-between gap-3">
           <CardTitle className="pr-2 text-lg leading-tight">
             {item.name}
           </CardTitle>
-          <Badge
-            className={`shrink-0 ${getCategoryChipClassName(item.category)}`}>
+          <Badge className={`shrink-0 ${getCategoryChipClassName(item.category)}`}>
             {item.category}
           </Badge>
         </div>
@@ -428,7 +452,7 @@ function CatalogItemCard({
         <AddToBasketControl
           isPending={isAdding}
           price={item.price}
-          availableQuantity={item.availableQuantity}
+          availableQuantity={Math.max(0, item.availableQuantity - basketQuantity)}
           onAdd={onAdd}
         />
       </CardContent>
