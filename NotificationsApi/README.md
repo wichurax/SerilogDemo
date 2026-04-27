@@ -25,13 +25,15 @@ The Notifications API hosts broker-backed fan-out inside a single downstream API
 docker compose up -d notifications-api rabbitmq
 ```
 
+In Docker Compose, this service stays on the internal network. Run it directly when you want to call the inspection endpoints from the host.
+
 ### Local Run
 
 ```bash
 dotnet run --project NotificationsApi/NotificationsApi.csproj
 ```
 
-The service exposes `/health` plus read-only inspection endpoints for users and delivery history.
+When run directly, the service exposes `/health` plus read-only inspection endpoints for users and delivery history.
 
 ## Required Configuration
 
