@@ -1,4 +1,4 @@
-import { Boxes, CreditCard, PackageSearch, ShoppingCart, ReceiptText, type LucideIcon } from 'lucide-react'
+import { Boxes, CreditCard, Package, PackageSearch, ShoppingCart, ReceiptText, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 
 import { UserSwitcher } from '@/components/layout/user-switcher'
@@ -29,8 +29,13 @@ const customerNavItems = [
 
 const operationsNavItems = [
   {
-    to: '/warehouse',
-    label: 'Warehouse',
+    to: '/warehouse/backlog',
+    label: 'Backlog',
+    icon: Package,
+  },
+  {
+    to: '/warehouse/inventory',
+    label: 'Inventory',
     icon: Boxes,
   },
 ] as const
@@ -43,9 +48,9 @@ export function AppShell() {
       {/* ── Sidebar ── */}
       <aside className='fixed inset-y-0 left-0 z-50 flex w-14 flex-col border-r border-border/70 bg-white shadow-sm lg:w-56'>
         <nav className='flex flex-1 flex-col gap-1 overflow-y-auto px-2 py-4 lg:px-3'>
-          <NavSection items={customerNavItems} />
+          <NavSection compactLabel='Shop' heading='Storefront' items={customerNavItems} />
           <div aria-hidden className='my-2 h-px w-full bg-border/80' />
-          <NavSection items={operationsNavItems} />
+          <NavSection compactLabel='Whse' heading='Warehouse worker' items={operationsNavItems} />
         </nav>
 
         <div className='border-t border-border/70 px-2 py-3 lg:px-3'>
@@ -66,6 +71,8 @@ export function AppShell() {
 }
 
 type NavSectionProps = {
+  compactLabel: string
+  heading: string
   items: readonly {
     to: string
     label: string
@@ -73,9 +80,17 @@ type NavSectionProps = {
   }[]
 }
 
-function NavSection({ items }: NavSectionProps) {
+function NavSection({ compactLabel, heading, items }: NavSectionProps) {
   return (
     <div className='flex flex-col gap-1'>
+      <div className='px-1 pb-1'>
+        <p className='hidden px-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground lg:block'>
+          {heading}
+        </p>
+        <p className='px-1 text-center text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground lg:hidden'>
+          {compactLabel}
+        </p>
+      </div>
       {items.map(({ to, label, icon: Icon }) => (
         <NavLink
           key={to}

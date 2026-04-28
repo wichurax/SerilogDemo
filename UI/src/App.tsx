@@ -63,11 +63,19 @@ const router = createBrowserRouter([
         },
       },
       {
-        path: 'warehouse',
+        path: 'warehouse/backlog',
         hydrateFallbackElement: <RouteLoadingState />,
         lazy: async () => {
-          const { WarehousePage } = await import('@/features/warehouse/warehouse-page')
-          return { Component: WarehousePage }
+          const { WarehouseBacklogPage } = await import('@/features/warehouse/warehouse-page')
+          return { Component: WarehouseBacklogPage }
+        },
+      },
+      {
+        path: 'warehouse/inventory',
+        hydrateFallbackElement: <RouteLoadingState />,
+        lazy: async () => {
+          const { WarehouseInventoryPage } = await import('@/features/warehouse/warehouse-inventory-page')
+          return { Component: WarehouseInventoryPage }
         },
       },
     ],
