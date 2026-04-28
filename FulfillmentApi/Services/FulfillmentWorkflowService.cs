@@ -37,7 +37,7 @@ public sealed class FulfillmentWorkflowService
 
         if (!string.IsNullOrWhiteSpace(query.OrderNumber))
         {
-            attemptsQuery = attemptsQuery.Where(attempt => attempt.OrderNumber == query.OrderNumber);
+            attemptsQuery = attemptsQuery.Where(attempt => attempt.OrderNumber.Contains(query.OrderNumber));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Warehouse))
